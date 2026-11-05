@@ -211,8 +211,7 @@ impl App {
             && let Some(entity) = self.game.world.entities.get(entity_id)
             && entity.category() == EntityCategory::Npc
         {
-            self.channel
-                .send_packet(build_contact_npc_packet(entity_id, self.active_packetver));
+            self.contact_npc(entity_id);
             return;
         }
         if let Some(entity_id) = self.game.hover.hovered_entity_id
@@ -315,6 +314,35 @@ impl App {
                 .send_packet(build_change_direction_packet(head_dir, dir, pv));
         }
         true
+    }
+
+    /// Talks to an NPC as the original client does: contacts it, then turns to
+    /// face it and tells the server, which shows the turn to everyone else
+    pub(crate) fn contact_npc(&mut self, npc_id: u32) {
+        self.channel
+            .send_packet(build_contact_npc_packet(npc_id, self.active_packetver));
+        self.face_entity(npc_id);
+    }
+
+    /// Turns the player toward an entity's cell; nothing when they share it
+    fn face_entity(&mut self, target_id: u32) {
+        let pv = self.active_packetver;
+        let entities = &mut self.game.world.entities;
+        let Some((tx, ty)) = entities.get(target_id).map(|e| e.movement.cell_position()) else {
+            return;
+        };
+        let Some(player) = entities.player_mut() else {
+            return;
+        };
+        let (px, py) = player.movement.cell_position();
+        let Some(target) = direction_from_delta(tx as f32 - px as f32, ty as f32 - py as f32)
+        else {
+            return;
+        };
+        player.look_at_direction(target);
+        let (head_dir, dir) = (player.head_dir, player.direction);
+        self.channel
+            .send_packet(build_change_direction_packet(head_dir, dir, pv));
     }
 }
 

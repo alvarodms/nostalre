@@ -2301,8 +2301,7 @@ impl App {
                         .send_packet(build_req_disconnect_packet(self.active_packetver));
                 }
                 GameEvent::RequestNpcContact { npc_id } => {
-                    self.channel
-                        .send_packet(build_contact_npc_packet(npc_id, self.active_packetver));
+                    self.contact_npc(npc_id);
                 }
                 GameEvent::RequestNpcNext { npc_id } => {
                     self.channel
