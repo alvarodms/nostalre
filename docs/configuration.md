@@ -53,6 +53,8 @@ are lost on the next save.
 | `shortcut_commands` | Chat commands bound to Alt+1 through Alt+0 by the Shortcut List window. Ten slots. | `["/!", "/?", "/ho", "/lv", "/swt", "/ic", "/an", "/ag", "/$", "/..."]` | No |
 | `keybindings` | Key chord per hotkey action. Missing actions are filled from the defaults at load time. See [Keybindings](#keybindings). | all 22 actions bound, listed in [Keybindings](#keybindings) | No |
 | `emotion_keys` | Trigger key per emote, keyed by emote type. See [Emotion keys](#emotion-keys). | `{}` | No |
+| `pad_buttons` | Which in-game button each physical controller button is, listing only the moved ones. See [Controller](#controller). | `{}` | No |
+| `pad_wheel` | The eight entries of the wheel opened by holding Select. See [Controller](#controller). | Items, Equipment, Skills, Status, Quests, Party, Emotions, World Map | No |
 | `window_state` | Saved position, open and collapsed state per UI window. See [Window state](#window-state). | `{}` | No |
 | `display` | Name plate, damage and cast bar visibility. See [display](#display). | `{"show_other_damage": true, "show_other_cast_bars": true, "hide_name_player": false, "hide_name_monster": false, "hide_name_npc": false, "show_level_aura": true}` | No |
 | `snap` | Mouse snapping targets. See [snap](#snap). | `{"monster_no_skill": false, "monster_skill": true, "item": false}` | No |
@@ -563,6 +565,33 @@ shape as `keybindings`. Empty by default.
 ```json
 "emotion_keys": {
   "0": { "key": "F1", "alt": false, "ctrl": true, "shift": false }
+}
+```
+
+## Controller
+
+Both are edited from Settings → Controller on handhelds.
+
+`pad_buttons` maps a physical button to the in-game button it acts as, by
+Android's button names (`A`, `B`, `X`, `Y`, `L1`, `R1`, `L2`, `R2`, `L3`, `R3`,
+`Start`, `Select`). Only moved buttons are listed. The map is always one to one:
+a file where two buttons share a job, or a job has no button, is read as the
+standard layout. The D-pad and sticks are not remappable. The Nintendo preset
+swaps A with B and X with Y:
+
+```json
+"pad_buttons": { "A": "B", "B": "A", "X": "Y", "Y": "X" }
+```
+
+`pad_wheel` lists the wheel's eight entries clockwise from the top, as
+[`HotkeyAction`](../lib/game/src/keybinding.rs) names; `null` leaves a slice
+empty. Hold Select alone to open the wheel, point the right stick at an entry and
+let go of Select to open it.
+
+```json
+"pad_wheel": {
+  "slots": ["ToggleInventory", "ToggleEquipment", "ToggleSkillTree", "ToggleStatus",
+            "ToggleQuest", "ToggleParty", "ToggleEmotion", "ToggleWorldMap"]
 }
 ```
 
