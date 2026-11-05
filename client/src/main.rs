@@ -214,7 +214,7 @@ impl App {
         sound.set_stereo(config.custom.sound.stereo);
         Self {
             touch_mouse: Default::default(),
-            gamepad: Default::default(),
+            gamepad: input::gamepad::Gamepad::new(config.pad_buttons),
             soft_keyboard: Default::default(),
             suspended: false,
             config,
@@ -860,6 +860,7 @@ impl ApplicationHandler for App {
         ui_ctx.dpi_scale = dpi_scale;
         ui_ctx.lock_account_windows = true;
         self.ui_context = Some(ui_ctx);
+        self.label_pad(self.config.pad_buttons);
 
         if !self.config.grf_paths.is_empty() {
             let data_dir = self.config.data_dir.as_deref().map(Path::new);

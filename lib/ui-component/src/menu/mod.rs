@@ -250,6 +250,19 @@ impl Menu {
         self.settings.capture(chord)
     }
 
+    /// Settings' Controller page waits for a button: the pad hands it the next press instead of acting on it
+    pub fn is_capturing_pad(&self) -> bool {
+        self.open && self.screen == Screen::Settings && self.settings.is_capturing_pad()
+    }
+
+    /// The physical button the Controller page waited for; the layout after it, when it changed
+    pub fn capture_pad(&mut self, physical: nostalre_game::pad::PadButton) -> Option<GameEvent> {
+        if !self.is_capturing_pad() {
+            return None;
+        }
+        self.settings.capture_pad(physical)
+    }
+
     /// Escape while the Keys page waits: the key stays as it was
     pub fn cancel_key_capture(&mut self) {
         self.settings.cancel_capture();

@@ -82,6 +82,18 @@ impl HotkeyAction {
             HotkeyAction::ToggleWorldMap => "World Map",
         }
     }
+
+    /// The action as the frameless menu names it (the Keys page, the controller's wheel): its commands'
+    /// names, not the classic windows'
+    pub fn menu_name(self) -> &'static str {
+        match self {
+            HotkeyAction::ToggleInventory => "Items",
+            HotkeyAction::ToggleShortcutList => "Chat Lines",
+            HotkeyAction::ToggleEmotion => "Emotions",
+            HotkeyAction::ToggleQuest => "Quests",
+            _ => self.label(),
+        }
+    }
 }
 
 /// A key plus its modifier state. `key` is the winit `KeyCode` debug name

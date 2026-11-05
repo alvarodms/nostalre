@@ -3149,6 +3149,11 @@ impl App {
                     self.apply_graphics_settings(settings, persist);
                 }
                 GameEvent::KeyBindingsChanged(keys) => self.apply_key_bindings(*keys),
+                GameEvent::PadButtonsChanged(buttons) => self.apply_pad_buttons(buttons),
+                GameEvent::PadWheelChanged(wheel) => {
+                    self.config.pad_wheel = wheel;
+                    self.save_config_soon();
+                }
                 GameEvent::ToggleHotkeyConfig => {
                     if !self.windows.hotkey_config_window.is_open() {
                         self.windows

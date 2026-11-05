@@ -1281,6 +1281,10 @@ pub enum GameEvent {
     ToggleHotkeyConfig,
     /// The menu's Keys page: every binding, after one changed
     KeyBindingsChanged(Box<crate::keybinding::KeyBindings>),
+    /// The Controller page: the button layout, after one button moved
+    PadButtonsChanged(crate::pad::PadButtons),
+    /// The Controller page: the wheel's entries, after one changed
+    PadWheelChanged(crate::pad::PadWheel),
     /// Graphic Options' "Frameless HUD" box (`docs/nostalre-hud.md`)
     HudLayoutChanged {
         layout: crate::display::HudLayout,

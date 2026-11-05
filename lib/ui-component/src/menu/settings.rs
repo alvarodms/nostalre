@@ -9,6 +9,9 @@ use nostalre_game::display::{GraphicsSettings, HudLayout, SoundSettings};
 use nostalre_game::event::GameEvent;
 use nostalre_game::hd::HdPreset;
 use nostalre_game::keybinding::{HotkeyAction, KeyBindings, KeyChord};
+use nostalre_game::pad::{
+    PadButton, PadButtons, PadPreset, PadWheel, WHEEL_DIRECTIONS, WHEEL_SLOTS,
+};
 use nostalre_ui::frame::{UiFrame, WidgetId};
 use nostalre_ui::rect::Rect;
 use nostalre_ui::text_input::TextInput;
@@ -30,8 +33,26 @@ const LINE_LABEL_W: f32 = 90.0;
 const LINE_LABELS: [&str; SLOT_COUNT] = [
     "Alt+1", "Alt+2", "Alt+3", "Alt+4", "Alt+5", "Alt+6", "Alt+7", "Alt+8", "Alt+9", "Alt+0",
 ];
-const PAD_NOTE: &str =
-    "Controller buttons are fixed: A, B, X, Y, L1 and R1 as the menu's hints show.";
+/// The Controller page's buttons, down the left column then the right
+const PAD_BUTTONS: [PadButton; 12] = [
+    PadButton::A,
+    PadButton::B,
+    PadButton::X,
+    PadButton::Y,
+    PadButton::Start,
+    PadButton::Select,
+    PadButton::L1,
+    PadButton::R1,
+    PadButton::L2,
+    PadButton::R2,
+    PadButton::L3,
+    PadButton::R3,
+];
+const PAD_COLUMN: usize = PAD_BUTTONS.len() / 2;
+/// The Controller page's rows: the preset, the buttons, the wheel's entries
+const PAD_ROWS: usize = 1 + PAD_BUTTONS.len() + WHEEL_SLOTS;
+/// A button waited for this long is left as it was
+const PAD_CAPTURE_MS: u64 = 5000;
 
 /// What the pages show and change, as the client's config holds it
 #[derive(Debug, Clone, Default)]
@@ -42,6 +63,10 @@ pub struct SettingsValues {
     pub keys: KeyBindings,
     /// Alt+1 to Alt+0
     pub chat_lines: Vec<String>,
+    /// The controller's buttons
+    pub pad: PadButtons,
+    /// What holding Select's wheel opens
+    pub wheel: PadWheel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -501,10 +526,22 @@ enum Page {
     Gameplay,
     Sound,
     Keys,
+    Controller,
     ChatLines,
 }
 
-const PAGES: [Page; 7] = [
+/// A handheld's pages: a controller is read only there (`client/src/input/gamepad.rs`)
+const PAGES: [Page; 8] = [
+    Page::Display,
+    Page::Graphics,
+    Page::OnScreen,
+    Page::Gameplay,
+    Page::Sound,
+    Page::Keys,
+    Page::Controller,
+    Page::ChatLines,
+];
+const DESKTOP_PAGES: [Page; 7] = [
     Page::Display,
     Page::Graphics,
     Page::OnScreen,
@@ -513,6 +550,64 @@ const PAGES: [Page; 7] = [
     Page::Keys,
     Page::ChatLines,
 ];
+
+fn pages() -> &'static [Page] {
+    if HANDHELD { &PAGES } else { &DESKTOP_PAGES }
+}
+
+/// A row of the Controller page
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PadRow {
+    Preset,
+    /// Index into `PAD_BUTTONS`
+    Button(usize),
+    /// A wheel section, clockwise from the top
+    Wheel(usize),
+}
+
+impl PadRow {
+    fn of(row: usize) -> Self {
+        match row {
+            0 => Self::Preset,
+            r if r <= PAD_BUTTONS.len() => Self::Button(r - 1),
+            r => Self::Wheel(r - 1 - PAD_BUTTONS.len()),
+        }
+    }
+}
+
+fn preset_label(pad: &PadButtons) -> &'static str {
+    pad.preset().map_or("Custom", PadPreset::label)
+}
+
+/// The preset after (`forward`) or before the layout's; a custom one goes to the first or the last
+fn step_preset(pad: &PadButtons, forward: bool) -> PadButtons {
+    let n = PadPreset::ALL.len();
+    let at = pad
+        .preset()
+        .and_then(|p| PadPreset::ALL.iter().position(|q| *q == p));
+    let next = match (at, forward) {
+        (Some(i), true) => (i + 1) % n,
+        (Some(i), false) => (i + n - 1) % n,
+        (None, true) => 0,
+        (None, false) => n - 1,
+    };
+    PadPreset::ALL[next].buttons()
+}
+
+fn wheel_label(entry: Option<HotkeyAction>) -> &'static str {
+    entry.map_or("—", HotkeyAction::menu_name)
+}
+
+/// A button the Controller page waits for
+#[derive(Debug, Clone, Copy)]
+struct PadCapture {
+    /// The in-game button that is moving
+    button: PadButton,
+    /// When it started, `UiContext::now_ms`; 0 until the page is next drawn
+    since_ms: u64,
+    /// Seconds left, for the help line
+    left_s: u64,
+}
 
 impl Page {
     fn label(self) -> &'static str {
@@ -523,6 +618,7 @@ impl Page {
             Self::Gameplay => "Gameplay",
             Self::Sound => "Sound",
             Self::Keys => "Keys",
+            Self::Controller => "Controller",
             Self::ChatLines => "Chat Lines",
         }
     }
@@ -588,7 +684,7 @@ impl Page {
                 O(Opt::Stereo),
                 O(Opt::Background),
             ],
-            Self::Keys | Self::ChatLines => &[],
+            Self::Keys | Self::Controller | Self::ChatLines => &[],
         }
     }
 
@@ -601,15 +697,8 @@ impl Page {
     }
 }
 
-/// An action as the menu names it: its commands' names, not the classic windows'
 fn key_name(action: HotkeyAction) -> &'static str {
-    match action {
-        HotkeyAction::ToggleInventory => "Items",
-        HotkeyAction::ToggleShortcutList => "Chat Lines",
-        HotkeyAction::ToggleEmotion => "Emotions",
-        HotkeyAction::ToggleQuest => "Quests",
-        _ => action.label(),
-    }
+    action.menu_name()
 }
 
 /// A binding as the menu writes it: `Alt+E`, a dash for none
@@ -653,6 +742,8 @@ pub(super) struct Settings {
     values: Option<Box<Loaded>>,
     /// The action whose new key the next press is
     capturing: Option<HotkeyAction>,
+    /// The in-game controller button whose new physical button the next pad press is
+    capturing_pad: Option<PadCapture>,
     /// The picked chat line, being typed
     editing: Option<TextInput>,
     /// What the last key press did, said in the help line until the next move
@@ -675,6 +766,7 @@ impl Settings {
     pub fn leave(&mut self) {
         self.values = None;
         self.capturing = None;
+        self.capturing_pad = None;
         self.editing = None;
         self.note = None;
     }
@@ -682,16 +774,56 @@ impl Settings {
     /// Escape: out of a key being set or a line being typed; false when there was none
     pub fn back(&mut self) -> bool {
         self.note = None;
-        self.capturing.take().is_some() || self.editing.take().is_some()
+        self.capturing.take().is_some()
+            || self.capturing_pad.take().is_some()
+            || self.editing.take().is_some()
     }
 
     pub fn cancel_capture(&mut self) {
         self.capturing = None;
+        self.capturing_pad = None;
         self.note = None;
     }
 
+    /// A keyboard key or a controller button is waited for: the client hands the keyboard's presses here
+    /// (Escape cancels either)
     pub fn is_capturing(&self) -> bool {
-        self.capturing.is_some()
+        self.capturing.is_some() || self.capturing_pad.is_some()
+    }
+
+    /// The Controller page waits for a button: the pad hands its next press here, not to the game
+    pub fn is_capturing_pad(&self) -> bool {
+        self.capturing_pad.is_some()
+    }
+
+    /// The physical button pressed for the in-game button waiting for one. The button that had that job takes
+    /// the pressed one's old job, so every job stays on some button; pressing the one it is on keeps it
+    pub fn capture_pad(&mut self, physical: PadButton) -> Option<GameEvent> {
+        let logical = self.capturing_pad.take()?.button;
+        let pad = &mut self.values.as_mut()?.now.pad;
+        let old = pad.physical(logical);
+        let displaced = pad.logical(physical);
+        if !pad.assign(physical, logical) {
+            self.note = Some(format!("{} stays on {}.", logical.role(), physical.name()));
+            return None;
+        }
+        self.note = Some(format!(
+            "{} took {}; {} moved to {}.",
+            logical.role(),
+            physical.name(),
+            displaced.role(),
+            old.name()
+        ));
+        Some(GameEvent::PadButtonsChanged(*pad))
+    }
+
+    fn start_pad_capture(&mut self, button: PadButton, now_ms: u64) {
+        self.capturing_pad = Some(PadCapture {
+            button,
+            since_ms: now_ms,
+            left_s: PAD_CAPTURE_MS / 1000,
+        });
+        self.note = None;
     }
 
     /// A chat line is being typed: the keys are text, not the game's
@@ -737,6 +869,21 @@ impl Settings {
 
     pub fn footer(&self) -> (String, Vec<Hint>) {
         let action = |label| Hint::tap("Enter", label, Key::Enter);
+        if let Some(waiting) = self.capturing_pad {
+            let keeps = self
+                .values
+                .as_ref()
+                .map(|v| v.now.pad.physical(waiting.button).name());
+            let help = self.note.clone().unwrap_or_else(|| {
+                format!(
+                    "Press the new button for {}. {} keeps it.  {}s",
+                    waiting.button.role(),
+                    keeps.unwrap_or_default(),
+                    waiting.left_s
+                )
+            });
+            return (help, vec![Hint::CANCEL]);
+        }
         if let Some(waiting) = self.capturing {
             let keeps = self
                 .values
@@ -767,6 +914,7 @@ impl Settings {
                 format!("Sent to chat with {}.", LINE_LABELS[self.picked]),
                 Some("edit"),
             ),
+            Page::Controller => (self.pad_help(), Some("change")),
             page => match page.opts().nth(self.picked) {
                 Some(opt) => (opt.help().to_string(), opt.verb()),
                 None => (String::new(), None),
@@ -793,7 +941,7 @@ impl Settings {
             return;
         };
         // a key being set or a line being typed has the keys to itself: only a tap turns the page
-        let busy = self.capturing.is_some() || self.editing.is_some();
+        let busy = self.is_capturing() || self.editing.is_some();
         let free = if busy { Keys::default() } else { *keys };
         let pages_w = PAGES_W.min(area.w * 0.3).floor();
         let turned = self.pages(ui, area, pages_w, &free);
@@ -808,6 +956,7 @@ impl Settings {
         let v = &mut *values;
         match self.page {
             Page::Keys => self.keys_page(ui, opts, &free, reset_all, v, events),
+            Page::Controller => self.controller_page(ui, opts, &free, reset_all, v, events),
             Page::ChatLines => self.lines_page(ui, opts, &free, keys.enter, reset_all, v, events),
             page => self.options_page(ui, opts, page, &free, reset_all, v, events),
         }
@@ -821,15 +970,17 @@ impl Settings {
             self.scroll = 0.0;
         }
         self.capturing = None;
+        self.capturing_pad = None;
         self.editing = None;
         self.note = None;
     }
 
     /// The page list, the open one in bold; returns the one turned to by a tap or the page keys
     fn pages(&mut self, ui: &mut UiFrame, area: Rect, w: f32, keys: &Keys) -> Option<Page> {
-        let at = PAGES.iter().position(|&p| p == self.page).unwrap_or(0);
-        let mut turned = frame::switch_tab(keys, at, PAGES.len(), None);
-        for (i, page) in PAGES.iter().enumerate() {
+        let pages = pages();
+        let at = pages.iter().position(|&p| p == self.page).unwrap_or(0);
+        let mut turned = frame::switch_tab(keys, at, pages.len(), None);
+        for (i, page) in pages.iter().enumerate() {
             let rect = Rect::new(area.x, area.y + i as f32 * ROW_H, w, ROW_H);
             let resp = ui.interact(WidgetId(SETTINGS_PAGE_BASE_ID + i as u32), rect);
             let baseline = frame::row_baseline(ui, rect);
@@ -850,12 +1001,12 @@ impl Settings {
                 turned = i;
             }
         }
-        (turned != at).then_some(PAGES[turned])
+        (turned != at).then_some(pages[turned])
     }
 
     /// "Reset page" under the page list; true when tapped
     fn reset_row(&mut self, ui: &mut UiFrame, area: Rect, w: f32) -> bool {
-        let y = area.y + PAGES.len() as f32 * ROW_H + SECTION_GAP;
+        let y = area.y + pages().len() as f32 * ROW_H + SECTION_GAP;
         style::rule(ui, area.x, y, w);
         let rect = Rect::new(area.x, y + SECTION_GAP, w, ROW_H);
         let resp = ui.interact(SETTINGS_RESET_ID, rect);
@@ -1079,9 +1230,216 @@ impl Settings {
                 self.note = None;
             }
         }
-        let note_y = y + per_column as f32 * ROW_H + SECTION_GAP;
-        let pad = style::fit(ui, PAD_NOTE, area.w);
-        style::text(ui, area.x, style::baseline(ui, note_y), &pad, style::DIM);
+    }
+
+    /// The Controller page's help line for the picked row
+    fn pad_help(&self) -> String {
+        let select = self
+            .values
+            .as_ref()
+            .map_or("Select", |v| v.now.pad.physical(PadButton::Select).name());
+        match PadRow::of(self.picked) {
+            PadRow::Preset => {
+                "Nintendo: A and B, X and Y swapped. A moved button makes it Custom.".to_string()
+            }
+            PadRow::Button(b) => format!(
+                "{}: change, then press the button for it. The button you take swaps with it.",
+                PAD_BUTTONS[b].role()
+            ),
+            PadRow::Wheel(w) => format!(
+                "Hold {select} alone, point the right stick {}, let go: this opens.",
+                WHEEL_DIRECTIONS[w].to_lowercase()
+            ),
+        }
+    }
+
+    /// The controller: a preset, the twelve buttons that can move (two columns, left and right cross between
+    /// them), the wheel's eight entries. A button's row waits for the pad's next press (`capture_pad`)
+    #[allow(clippy::too_many_arguments)]
+    fn controller_page(
+        &mut self,
+        ui: &mut UiFrame,
+        area: Rect,
+        keys: &Keys,
+        reset_all: bool,
+        loaded: &mut Loaded,
+        events: &mut Vec<GameEvent>,
+    ) {
+        let now_ms = ui.ctx.now_ms;
+        if let Some(waiting) = &mut self.capturing_pad {
+            if waiting.since_ms == 0 {
+                waiting.since_ms = now_ms;
+            }
+            let spent = now_ms.saturating_sub(waiting.since_ms);
+            waiting.left_s = PAD_CAPTURE_MS.saturating_sub(spent).div_ceil(1000);
+            if spent >= PAD_CAPTURE_MS {
+                self.capturing_pad = None;
+                self.note = Some("No button pressed: nothing changed.".to_string());
+            }
+        }
+
+        let before = self.picked;
+        self.picked = frame::step(keys, self.picked, PAD_ROWS);
+        if let PadRow::Button(b) = PadRow::of(self.picked)
+            && (keys.left || keys.right)
+        {
+            self.picked = 1 + (b + PAD_COLUMN) % PAD_BUTTONS.len();
+        }
+        if self.picked != before {
+            self.note = None;
+        }
+
+        let Loaded { now, defaults, .. } = &mut *loaded;
+        let (old_pad, old_wheel) = (now.pad, now.wheel);
+        if reset_all {
+            now.pad = defaults.pad;
+            now.wheel = defaults.wheel;
+        }
+        match PadRow::of(self.picked) {
+            PadRow::Preset => {
+                if keys.left {
+                    now.pad = step_preset(&now.pad, false);
+                } else if keys.right || keys.enter {
+                    now.pad = step_preset(&now.pad, true);
+                }
+                if keys.remove {
+                    now.pad = defaults.pad;
+                }
+            }
+            PadRow::Button(b) => {
+                let button = PAD_BUTTONS[b];
+                if keys.enter {
+                    self.start_pad_capture(button, now_ms);
+                }
+                if keys.remove {
+                    now.pad.assign(defaults.pad.physical(button), button);
+                }
+            }
+            PadRow::Wheel(w) => {
+                if keys.left {
+                    now.wheel.step(w, false);
+                } else if keys.right || keys.enter {
+                    now.wheel.step(w, true);
+                }
+                if keys.remove {
+                    now.wheel.slots[w] = defaults.wheel.slots[w];
+                }
+            }
+        }
+
+        // where each row sits on the unscrolled page: the preset, the buttons' two columns, the wheel
+        let heading_h = style::line(ui) + 8.0;
+        let preset_top = heading_h;
+        let buttons_heading = preset_top + ROW_H + SECTION_GAP;
+        let buttons_top = buttons_heading + heading_h;
+        let wheel_heading = buttons_top + PAD_COLUMN as f32 * ROW_H + SECTION_GAP;
+        let wheel_top = wheel_heading + heading_h;
+        let bottom = wheel_top + WHEEL_SLOTS as f32 * ROW_H;
+        let col_w = ((area.w - COLUMN_GAP) / 2.0).floor();
+        let row_rect = |row: usize, scroll: f32| match PadRow::of(row) {
+            PadRow::Preset => Rect::new(area.x, area.y + preset_top - scroll, area.w, ROW_H),
+            PadRow::Button(b) => Rect::new(
+                area.x + (b / PAD_COLUMN) as f32 * (col_w + COLUMN_GAP),
+                area.y + buttons_top + (b % PAD_COLUMN) as f32 * ROW_H - scroll,
+                col_w,
+                ROW_H,
+            ),
+            PadRow::Wheel(w) => Rect::new(
+                area.x,
+                area.y + wheel_top + w as f32 * ROW_H - scroll,
+                area.w,
+                ROW_H,
+            ),
+        };
+
+        self.scroll += frame::wheel_step(ui, area) as f32 * ROW_H * 2.0;
+        if self.picked != before {
+            let top = row_rect(self.picked, 0.0).y - area.y;
+            if top < self.scroll {
+                self.scroll = top;
+            } else if top + ROW_H > self.scroll + area.h {
+                self.scroll = top + ROW_H - area.h;
+            }
+        }
+        self.scroll = self.scroll.clamp(0.0, (bottom - area.h).max(0.0));
+        let scroll = self.scroll;
+        let in_view = |r: Rect| r.y >= area.y - 0.5 && r.y + r.h <= area.y + area.h + 0.5;
+
+        for (top, heading) in [
+            (0.0, "Layout"),
+            (buttons_heading, "Buttons"),
+            (wheel_heading, "Wheel"),
+        ] {
+            let r = Rect::new(area.x, area.y + top - scroll, area.w, heading_h);
+            if in_view(r) {
+                frame::section(ui, r.x, r.y, r.w, heading);
+            }
+        }
+
+        let mut tapped = None;
+        for row in 0..PAD_ROWS {
+            let rect = row_rect(row, scroll);
+            if !in_view(rect) {
+                continue;
+            }
+            let id = WidgetId(ROW_BASE_ID + row as u32);
+            let resp = frame::row(ui, id, rect, row == self.picked);
+            let baseline = frame::row_baseline(ui, rect);
+            let tap = match PadRow::of(row) {
+                PadRow::Preset => {
+                    style::text(ui, rect.x + ROW_TEXT, baseline, "Preset", style::TEXT);
+                    value(ui, rect, Shown::Choice(preset_label(&now.pad)))
+                }
+                PadRow::Button(b) => {
+                    let button = PAD_BUTTONS[b];
+                    let physical = now.pad.physical(button);
+                    // a button moved off its own shows in the accent
+                    let color = if physical == defaults.pad.physical(button) {
+                        style::TEXT
+                    } else {
+                        style::ACCENT
+                    };
+                    style::text(ui, rect.x + ROW_TEXT, baseline, button.role(), color);
+                    let right = rect.x + rect.w - 8.0;
+                    if self.capturing_pad.is_some_and(|c| c.button == button) {
+                        style::text_right(ui, right, baseline, "press a button", style::ACCENT);
+                    } else {
+                        let cap = physical.name();
+                        let w = style::key_cap_width(ui, cap);
+                        let top = rect.y + ((ROW_H - style::line(ui)) / 2.0).floor();
+                        style::key_cap(ui, right - w, top, cap);
+                    }
+                    Tap::None
+                }
+                PadRow::Wheel(w) => {
+                    let direction = WHEEL_DIRECTIONS[w];
+                    style::text(ui, rect.x + ROW_TEXT, baseline, direction, style::TEXT);
+                    value(ui, rect, Shown::Choice(wheel_label(now.wheel.slots[w])))
+                }
+            };
+            if resp.clicked() {
+                tapped = Some((row, tap));
+            }
+        }
+        if let Some((row, tap)) = tapped {
+            self.picked = row;
+            self.note = None;
+            match (PadRow::of(row), tap) {
+                (PadRow::Preset, Tap::Change(how)) => {
+                    now.pad = step_preset(&now.pad, how != Change::Prev);
+                }
+                (PadRow::Button(b), _) => self.start_pad_capture(PAD_BUTTONS[b], now_ms),
+                (PadRow::Wheel(w), Tap::Change(how)) => now.wheel.step(w, how != Change::Prev),
+                _ => {}
+            }
+        }
+
+        if now.pad != old_pad {
+            events.push(GameEvent::PadButtonsChanged(now.pad));
+        }
+        if now.wheel != old_wheel {
+            events.push(GameEvent::PadWheelChanged(now.wheel));
+        }
     }
 
     /// The line being typed into the picked slot, sent; nothing when none is
@@ -1486,6 +1844,96 @@ mod tests {
         ));
     }
 
+    fn press(set: impl FnOnce(&mut Keys)) -> Keys {
+        let mut keys = Keys::default();
+        set(&mut keys);
+        keys
+    }
+
+    #[test]
+    fn a_pressed_button_swaps_with_the_one_that_had_the_job() {
+        let mut s = on_page(Page::Controller);
+        s.start_pad_capture(PadButton::A, 0);
+        let Some(GameEvent::PadButtonsChanged(pad)) = s.capture_pad(PadButton::B) else {
+            panic!("no layout sent");
+        };
+        assert_eq!(pad.logical(PadButton::B), PadButton::A);
+        assert_eq!(pad.logical(PadButton::A), PadButton::B);
+        assert!(!s.is_capturing_pad());
+        // the button it is on already keeps it
+        s.start_pad_capture(PadButton::A, 0);
+        assert!(s.capture_pad(PadButton::B).is_none());
+        assert!(s.note.as_deref().is_some_and(|n| n.contains("stays")));
+    }
+
+    #[test]
+    fn back_drops_a_button_being_waited_for() {
+        let mut s = on_page(Page::Controller);
+        s.start_pad_capture(PadButton::X, 0);
+        assert!(s.is_capturing());
+        assert!(s.back());
+        assert!(!s.is_capturing_pad());
+        assert!(s.capture_pad(PadButton::Y).is_none());
+    }
+
+    #[test]
+    fn a_button_waited_for_too_long_stays_where_it_was() {
+        let mut s = on_page(Page::Controller);
+        s.start_pad_capture(PadButton::X, 1000);
+        frame_on(&mut s, Keys::default(), |c| {
+            c.now_ms = 1000 + PAD_CAPTURE_MS - 1
+        });
+        assert!(s.is_capturing_pad());
+        frame_on(&mut s, Keys::default(), |c| {
+            c.now_ms = 1000 + PAD_CAPTURE_MS
+        });
+        assert!(!s.is_capturing_pad());
+    }
+
+    #[test]
+    fn the_preset_row_steps_to_nintendo_and_del_puts_standard_back() {
+        let mut s = on_page(Page::Controller);
+        let events = frame_on(&mut s, press(|k| k.right = true), |_| {});
+        let [GameEvent::PadButtonsChanged(pad)] = events.as_slice() else {
+            panic!("{events:?}");
+        };
+        assert_eq!(pad.preset(), Some(PadPreset::Nintendo));
+        let events = frame_on(&mut s, press(|k| k.remove = true), |_| {});
+        let [GameEvent::PadButtonsChanged(pad)] = events.as_slice() else {
+            panic!("{events:?}");
+        };
+        assert_eq!(pad.preset(), Some(PadPreset::Standard));
+    }
+
+    #[test]
+    fn enter_on_a_button_waits_for_the_pad_and_left_right_cross_the_columns() {
+        let mut s = on_page(Page::Controller);
+        s.picked = 1;
+        frame_on(&mut s, press(|k| k.right = true), |_| {});
+        assert_eq!(PadRow::of(s.picked), PadRow::Button(PAD_COLUMN));
+        assert_eq!(PAD_BUTTONS[PAD_COLUMN], PadButton::L1);
+        let events = frame_on(&mut s, enter(), |_| {});
+        assert!(events.is_empty());
+        assert!(s.capturing_pad.is_some_and(|c| c.button == PadButton::L1));
+    }
+
+    #[test]
+    fn a_wheel_entry_steps_and_del_puts_its_default_back() {
+        let mut s = on_page(Page::Controller);
+        s.picked = 1 + PAD_BUTTONS.len();
+        assert_eq!(PadRow::of(s.picked), PadRow::Wheel(0));
+        let events = frame_on(&mut s, press(|k| k.right = true), |_| {});
+        let [GameEvent::PadWheelChanged(wheel)] = events.as_slice() else {
+            panic!("{events:?}");
+        };
+        assert_ne!(wheel.slots[0], PadWheel::default().slots[0]);
+        let events = frame_on(&mut s, press(|k| k.remove = true), |_| {});
+        let [GameEvent::PadWheelChanged(wheel)] = events.as_slice() else {
+            panic!("{events:?}");
+        };
+        assert_eq!(*wheel, PadWheel::default());
+    }
+
     #[test]
     fn reset_page_puts_every_option_back() {
         let mut s = on_page(Page::Sound);
@@ -1493,8 +1941,8 @@ mod tests {
             l.now.sound.stereo = !l.defaults.sound.stereo;
             l.now.sound.bgm_volume = 0.1;
         }
-        // "Reset page" sits under the seven pages
-        let y = 80.0 + PAGES.len() as f32 * ROW_H + 2.0 * SECTION_GAP + ROW_H / 2.0;
+        // "Reset page" sits under the page list
+        let y = 80.0 + pages().len() as f32 * ROW_H + 2.0 * SECTION_GAP + ROW_H / 2.0;
         let events = frame_on(&mut s, Keys::default(), |c| {
             (c.mouse_x, c.mouse_y, c.mouse_clicked) = (100.0, y, true)
         });

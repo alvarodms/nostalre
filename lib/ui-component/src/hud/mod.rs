@@ -7,6 +7,7 @@ mod player;
 pub mod style;
 mod target;
 mod touch;
+mod wheel;
 
 use crate::BuildCtx;
 use crate::game::hotkey_bar::{DOCK_W, HotkeyDock};
@@ -16,6 +17,7 @@ pub use nostalre_game::display::HudLayout;
 use nostalre_ui::frame::UiFrame;
 use nostalre_ui::rect::Rect;
 pub use touch::{LEFT_COLUMN_H as TOUCH_LEFT_COLUMN_H, SlotFace, TouchInput, TouchSlots};
+pub use wheel::{WheelEntry, WheelView, build as wheel};
 
 /// A cast in progress, read from the caster's entity
 #[derive(Debug, Clone, PartialEq)]
@@ -87,6 +89,8 @@ pub struct HudInput {
     pub camera: Option<CameraReadout>,
     /// What the on-screen controls' slot buttons show, while they are on screen
     pub touch_slots: TouchSlots,
+    /// The controller's wheel, while Select holds it open: drawn over the windows, either layout
+    pub wheel: Option<WheelView>,
 }
 
 /// The windows the HUD draws in its own places: the skill rows (`hotkey_rows` of them), the minimap; a tap on

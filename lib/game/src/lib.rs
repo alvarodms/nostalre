@@ -65,6 +65,7 @@ pub mod npc_dialog;
 pub mod npc_shop;
 pub mod npc_text;
 pub mod party;
+pub mod pad;
 pub mod path;
 pub mod pet;
 pub mod pet_tables;

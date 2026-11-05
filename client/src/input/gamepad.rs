@@ -4,12 +4,17 @@
 //! button use a hotbar slot, in one of three sets (Select+L1/R1). The camera is ours (the design canvas,
 //! "Camera on controller and touch"): L2/R2 turn it, with Select held they tilt it, Select+Up/Down zooms, R3
 //! puts the starting view back. L3 sits down or stands up. Start is Enter, Select+Start Escape, the D-pad alone
-//! the arrow keys. While the HUD's menu is open, A, B, X, Y, L1 and R1 are its keys (`menu_press`).
+//! the arrow keys. While the HUD's menu is open, A, B, X, Y, L1 and R1 are its keys (`menu_press`). Select held
+//! alone opens the wheel: the right stick picks one of eight entries, letting Select go opens it
+//! (`gamepad_wheel`).
+//!
+//! Those are the in-game buttons: the Controller page can move them to other physical buttons
+//! (`nostalre_game::pad::PadButtons`), the D-pad and the sticks excepted.
 //!
 //! Buttons arrive as key events carrying the Android keycode; sticks, the D-pad hat and the triggers as
 //! DeviceEvent::Motion (vendor/winit). Android only for now.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
@@ -29,6 +34,7 @@ use nostalre_game::entity::{EntityState, EntityType};
 use nostalre_game::entity_collection::TALK_RANGE;
 use nostalre_game::hotkey::{PAD_SET_SLOTS, PAD_SETS};
 use nostalre_game::keybinding::HotkeyAction;
+use nostalre_game::pad::{PadButton, PadButtons, WHEEL_SLOTS, wheel_slot};
 use nostalre_game::targeting::{TargetClass, revives_corpse, skill_target_class};
 use nostalre_renderer::camera::CameraControl;
 
@@ -53,6 +59,8 @@ const ZOOM_NOTCHES_PER_SEC: f32 = 6.0;
 const TRIGGER_REST: f32 = 0.05;
 /// The camera readout stays this long after the camera stops moving, seconds
 const READOUT_LINGER: f32 = 1.0;
+/// Select held alone this long opens the wheel; a quicker press with another button stays a chord
+const WHEEL_DELAY: Duration = Duration::from_millis(250);
 
 /// Android axis ids (MotionEvent.AXIS_*), as vendor/winit reports them.
 mod axis {
@@ -88,24 +96,41 @@ pub(crate) enum Button {
     Right,
 }
 
-impl Button {
-    /// Android KeyEvent.KEYCODE_BUTTON_* / KEYCODE_DPAD_*.
-    fn from_android(code: u32) -> Option<Self> {
-        Some(match code {
-            96 => Self::A,
-            97 => Self::B,
-            99 => Self::X,
-            100 => Self::Y,
-            102 => Self::L1,
-            103 => Self::R1,
-            104 => Self::L2,
-            105 => Self::R2,
-            106 => Self::L3,
-            107 => Self::R3,
-            108 => Self::Start,
-            109 => Self::Select,
-            _ => return None,
-        })
+/// The physical button an Android KeyEvent.KEYCODE_BUTTON_* is
+fn from_android(code: u32) -> Option<PadButton> {
+    Some(match code {
+        96 => PadButton::A,
+        97 => PadButton::B,
+        99 => PadButton::X,
+        100 => PadButton::Y,
+        102 => PadButton::L1,
+        103 => PadButton::R1,
+        104 => PadButton::L2,
+        105 => PadButton::R2,
+        106 => PadButton::L3,
+        107 => PadButton::R3,
+        108 => PadButton::Start,
+        109 => PadButton::Select,
+        _ => return None,
+    })
+}
+
+impl From<PadButton> for Button {
+    fn from(button: PadButton) -> Self {
+        match button {
+            PadButton::A => Self::A,
+            PadButton::B => Self::B,
+            PadButton::X => Self::X,
+            PadButton::Y => Self::Y,
+            PadButton::L1 => Self::L1,
+            PadButton::R1 => Self::R1,
+            PadButton::L2 => Self::L2,
+            PadButton::R2 => Self::R2,
+            PadButton::L3 => Self::L3,
+            PadButton::R3 => Self::R3,
+            PadButton::Start => Self::Start,
+            PadButton::Select => Self::Select,
+        }
     }
 }
 
@@ -158,6 +183,22 @@ fn dead(v: f32) -> f32 {
 
 #[derive(Default)]
 pub(crate) struct Gamepad {
+    /// Which in-game button each physical one is
+    buttons: PadButtons,
+    /// The in-game button each physical button held went down as: its release lets go of that one, also
+    /// when the layout changed in between
+    down: HashMap<PadButton, Button>,
+    /// The Controller page waits for a button: the next press is its, not the game's
+    capturing: bool,
+    /// The press it waited for, handed over next frame
+    captured: Option<PadButton>,
+    /// Pressed for the Controller page and not let go yet: no in-game press until it is (a trigger's axis
+    /// keeps reporting)
+    swallowed: HashSet<PadButton>,
+    /// When Select went down with no other button; `None` once another joins it (a chord) or it is let go
+    select_alone: Option<Instant>,
+    /// The wheel is open, with the entry the right stick last pointed at
+    wheel: Option<Option<usize>>,
     held: HashSet<Button>,
     /// Pressed since the last frame, in order.
     fresh: Vec<Button>,
@@ -191,10 +232,36 @@ pub(crate) struct Gamepad {
 }
 
 impl Gamepad {
+    pub(crate) fn new(buttons: PadButtons) -> Self {
+        Self {
+            buttons,
+            ..Self::default()
+        }
+    }
+
+    /// The Controller page moved a button: presses from now on go by `buttons`
+    pub(crate) fn set_buttons(&mut self, buttons: PadButtons) {
+        self.buttons = buttons;
+    }
+
+    pub(crate) fn buttons(&self) -> PadButtons {
+        self.buttons
+    }
+
     /// A controller button: noted for the next frame. False for anything else (keyboards keep their keys).
     pub(crate) fn key(&mut self, event: &KeyEvent) -> bool {
         let button = match (&event.logical_key, event.physical_key) {
-            (Key::Unidentified(NativeKey::Android(code)), _) => Button::from_android(*code),
+            (Key::Unidentified(NativeKey::Android(code)), _) => {
+                let Some(physical) = from_android(*code) else {
+                    return false;
+                };
+                match event.state {
+                    ElementState::Pressed if !event.repeat => self.press_physical(physical),
+                    ElementState::Pressed => {}
+                    ElementState::Released => self.release_physical(physical),
+                }
+                return true;
+            }
             (_, PhysicalKey::Code(code)) => self.arrow(code, event.state),
             _ => None,
         };
@@ -220,7 +287,8 @@ impl Gamepad {
             _ => return None,
         };
         let held = |b| self.held.contains(&b);
-        (held(Button::Select) || (state == ElementState::Released && held(button))).then_some(button)
+        (held(Button::Select) || (state == ElementState::Released && held(button)))
+            .then_some(button)
     }
 
     pub(crate) fn axis(&mut self, id: u32, value: f64) {
@@ -239,15 +307,100 @@ impl Gamepad {
             }
             // triggers that only report an axis still work as L2/R2
             axis::LTRIGGER | axis::BRAKE => {
-                let v = self.axes[axis::LTRIGGER as usize].max(self.axes[axis::BRAKE as usize]);
-                self.set_held(Button::L2, v > 0.5);
+                let down = self.analog(PadButton::L2) > 0.5;
+                self.set_physical(PadButton::L2, down);
             }
             axis::RTRIGGER | axis::GAS => {
-                let v = self.axes[axis::RTRIGGER as usize].max(self.axes[axis::GAS as usize]);
-                self.set_held(Button::R2, v > 0.5);
+                let down = self.analog(PadButton::R2) > 0.5;
+                self.set_physical(PadButton::R2, down);
             }
             _ => {}
         }
+    }
+
+    /// A physical button went down: the in-game button it is, or the Controller page's press
+    fn press_physical(&mut self, physical: PadButton) {
+        if self.swallowed.contains(&physical) || self.down.contains_key(&physical) {
+            return;
+        }
+        if self.capturing {
+            self.swallowed.insert(physical);
+            self.captured = Some(physical);
+            return;
+        }
+        let button = Button::from(self.buttons.logical(physical));
+        self.down.insert(physical, button);
+        self.press(button);
+    }
+
+    fn release_physical(&mut self, physical: PadButton) {
+        self.swallowed.remove(&physical);
+        if let Some(button) = self.down.remove(&physical) {
+            self.release(button);
+        }
+    }
+
+    fn set_physical(&mut self, physical: PadButton, down: bool) {
+        if down {
+            self.press_physical(physical)
+        } else {
+            self.release_physical(physical)
+        }
+    }
+
+    /// How far a physical trigger is pressed by its axes, 0 for a button that has none
+    fn analog(&self, physical: PadButton) -> f32 {
+        let (a, b) = match physical {
+            PadButton::L2 => (axis::LTRIGGER, axis::BRAKE),
+            PadButton::R2 => (axis::RTRIGGER, axis::GAS),
+            _ => return 0.0,
+        };
+        self.axes[a as usize].max(self.axes[b as usize])
+    }
+
+    /// The wheel this frame: Select held alone for `WHEEL_DELAY` opens it while `allowed`, the right stick
+    /// picks an entry (kept when the stick goes back to the middle). Another button pressed with Select is a
+    /// chord as before and closes it unused, so B backs out. Returns the entry picked when Select is let go
+    fn wheel_frame(&mut self, now: Instant, allowed: bool) -> Option<usize> {
+        for &button in &self.fresh {
+            if button == Button::Select {
+                self.select_alone = (self.held.len() == 1).then_some(now);
+            } else {
+                self.select_alone = None;
+                self.wheel = None;
+            }
+        }
+        if self.released.contains(&Button::Select) || !self.held.contains(&Button::Select) {
+            self.select_alone = None;
+            return self.wheel.take().flatten().filter(|_| allowed);
+        }
+        if !allowed {
+            self.wheel = None;
+        } else if self.wheel.is_none()
+            && self.held.len() == 1
+            && self
+                .select_alone
+                .is_some_and(|at| now.duration_since(at) >= WHEEL_DELAY)
+        {
+            self.wheel = Some(None);
+        }
+        let (x, y) = self.stick(axis::Z, axis::RZ);
+        if let Some(picked) = &mut self.wheel
+            && let Some(slot) = wheel_slot(x, y)
+        {
+            *picked = Some(slot);
+        }
+        None
+    }
+
+    /// The Controller page waits for a button (`Menu::is_capturing_pad`), set each frame
+    pub(crate) fn set_capturing(&mut self, capturing: bool) {
+        self.capturing = capturing;
+    }
+
+    /// The press the Controller page waited for, once
+    pub(crate) fn take_captured(&mut self) -> Option<PadButton> {
+        self.captured.take()
     }
 
     fn press(&mut self, button: Button) {
@@ -300,13 +453,14 @@ impl Gamepad {
         }
     }
 
-    /// How far a trigger is pressed, 0 to 1: its axis, or all the way for one that only sends a button
+    /// How far the in-game L2 or R2 is pressed, 0 to 1: the axis of the trigger it is on, or all the way for
+    /// one that only sends a button (also a trigger moved onto a shoulder or a face button)
     fn trigger(&self, button: Button) -> f32 {
-        let (a, b) = match button {
-            Button::L2 => (axis::LTRIGGER, axis::BRAKE),
-            _ => (axis::RTRIGGER, axis::GAS),
+        let logical = match button {
+            Button::L2 => PadButton::L2,
+            _ => PadButton::R2,
         };
-        let analog = self.axes[a as usize].max(self.axes[b as usize]);
+        let analog = self.analog(self.buttons.physical(logical));
         if analog > TRIGGER_REST {
             analog.min(1.0)
         } else if self.held.contains(&button) {
@@ -333,7 +487,9 @@ impl App {
             .map_or(0.0, |t| now.duration_since(t).as_secs_f32().min(0.1));
         self.gamepad.last_frame = Some(now);
 
+        self.gamepad_capture();
         self.gamepad_aim();
+        self.gamepad_wheel(now);
         self.gamepad_cursor(event_loop, window, dt);
         self.gamepad_walk(now);
         self.gamepad_camera(dt);
@@ -720,10 +876,73 @@ impl App {
         self.gamepad.aim_candidates = candidates;
     }
 
-    /// Right stick: the cursor, as if the mouse moved (the UI and the world both see it). Frozen in aim mode.
+    /// The Controller page waits for a button: the press it gets is the physical button, not the game's
+    fn gamepad_capture(&mut self) {
+        self.gamepad
+            .set_capturing(self.windows.menu.is_capturing_pad());
+        if let Some(physical) = self.gamepad.take_captured() {
+            self.with_ui(|ui| ui.pad_labels = true);
+            if let Some(event) = self.windows.menu.capture_pad(physical) {
+                self.pending_events.push(event);
+            }
+        }
+    }
+
+    /// The wheel (`Gamepad::wheel_frame`); letting Select go opens the picked entry's window
+    fn gamepad_wheel(&mut self, now: Instant) {
+        let allowed = self.wheel_allowed();
+        let opened = self.gamepad.wheel_frame(now, allowed);
+        let wheel = self.gamepad.wheel;
+        self.windows.hud.input.wheel = wheel.map(|picked| self.wheel_view(picked));
+        if let Some(action) = opened.and_then(|slot| self.config.pad_wheel.slots[slot]) {
+            self.dispatch_action(action);
+        }
+    }
+
+    /// The wheel can open: in the game, nothing else taking the pad's buttons or the right stick
+    fn wheel_allowed(&self) -> bool {
+        self.game.session.app_state == AppState::InGame
+            && !self.windows.menu.is_open()
+            && !self.windows.npc_dialog.dialog.is_open()
+            && !self.windows.npc_shop.shop.is_open()
+            && !self.windows.chat_window.is_active()
+            && self.gamepad.aim.is_none()
+    }
+
+    fn wheel_view(&self, picked: Option<usize>) -> nostalre_ui_component::hud::WheelView {
+        let entry = |slot: usize| {
+            self.config.pad_wheel.slots[slot].map(|action| nostalre_ui_component::hud::WheelEntry {
+                label: action.menu_name(),
+                available: self.wheel_entry_works(action),
+            })
+        };
+        nostalre_ui_component::hud::WheelView {
+            entries: std::array::from_fn::<_, WHEEL_SLOTS, _>(entry),
+            picked,
+            release: self.gamepad.buttons().physical(PadButton::Select).name(),
+        }
+    }
+
+    /// An entry that would only say it cannot open shows dimmed
+    fn wheel_entry_works(&self, action: HotkeyAction) -> bool {
+        match action {
+            HotkeyAction::ToggleGuild => self.game.guild.is_some(),
+            HotkeyAction::ToggleCart => self
+                .game
+                .world
+                .entities
+                .player()
+                .is_some_and(|p| p.cart_type.is_some()),
+            _ => true,
+        }
+    }
+
+    /// Right stick: the cursor, as if the mouse moved (the UI and the world both see it). Frozen in aim mode,
+    /// and while Select is held alone (the stick is the wheel's).
     fn gamepad_cursor(&mut self, event_loop: &ActiveEventLoop, window: WindowId, dt: f32) {
         let (x, y) = self.gamepad.stick(axis::Z, axis::RZ);
-        if (x == 0.0 && y == 0.0) || self.gamepad.aim.is_some() {
+        let wheel = self.gamepad.wheel.is_some() || self.gamepad.select_alone.is_some();
+        if (x == 0.0 && y == 0.0) || self.gamepad.aim.is_some() || wheel {
             self.gamepad.cursor = None;
             return;
         }
@@ -932,6 +1151,7 @@ fn pad() -> DeviceId {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nostalre_game::pad::PadPreset;
 
     #[test]
     fn three_sets_of_twelve_cover_the_four_rows() {
@@ -986,7 +1206,10 @@ mod tests {
         assert_eq!(up, Some(Button::Up));
         pad.press(Button::Up);
         pad.release(Button::Select);
-        assert_eq!(pad.arrow(KeyCode::ArrowUp, ElementState::Released), Some(Button::Up));
+        assert_eq!(
+            pad.arrow(KeyCode::ArrowUp, ElementState::Released),
+            Some(Button::Up)
+        );
         pad.release(Button::Up);
         assert_eq!(pad.arrow(KeyCode::ArrowUp, ElementState::Released), None);
     }
@@ -1025,6 +1248,123 @@ mod tests {
         assert_eq!(walk_target((100, 100), (0.0, -1.0), 0.0), (100, 103));
         assert_eq!(walk_target((100, 100), (1.0, 0.0), 0.0), (103, 100));
         assert_eq!(walk_target((100, 100), (0.0, -0.5), 0.0), (100, 102));
+    }
+
+    /// One frame of the wheel: what it opened, then the frame's presses are spent as `gamepad_frame` spends them
+    fn wheel_frame(pad: &mut Gamepad, at: Instant, allowed: bool) -> Option<usize> {
+        let opened = pad.wheel_frame(at, allowed);
+        pad.fresh.clear();
+        pad.released.clear();
+        opened
+    }
+
+    #[test]
+    fn a_physical_button_presses_the_in_game_button_it_was_moved_to() {
+        let mut pad = Gamepad::new(PadPreset::Nintendo.buttons());
+        pad.press_physical(PadButton::A);
+        assert!(pad.held.contains(&Button::B));
+        assert!(!pad.held.contains(&Button::A));
+    }
+
+    #[test]
+    fn a_release_lets_go_of_what_the_press_went_down_as() {
+        let mut pad = Gamepad::default();
+        pad.press_physical(PadButton::A);
+        pad.set_buttons(PadPreset::Nintendo.buttons());
+        pad.release_physical(PadButton::A);
+        assert!(pad.held.is_empty());
+        assert_eq!(pad.released, [Button::A]);
+    }
+
+    #[test]
+    fn the_camera_turns_by_the_trigger_l2_was_moved_to() {
+        let mut buttons = PadButtons::default();
+        // the left trigger is L1 now, the left shoulder L2
+        buttons.assign(PadButton::L1, PadButton::L2);
+        let mut pad = Gamepad::new(buttons);
+        pad.axis(axis::LTRIGGER, 0.9);
+        assert!(pad.held.contains(&Button::L1));
+        assert_eq!(pad.trigger_turn(), 0.0);
+        pad.axis(axis::LTRIGGER, 0.0);
+        pad.press_physical(PadButton::L1);
+        assert_eq!(pad.trigger_turn(), -1.0);
+    }
+
+    #[test]
+    fn a_press_for_the_controller_page_is_not_the_games() {
+        let mut pad = Gamepad::default();
+        pad.set_capturing(true);
+        pad.press_physical(PadButton::B);
+        assert_eq!(pad.take_captured(), Some(PadButton::B));
+        assert!(pad.held.is_empty() && pad.fresh.is_empty());
+        // a trigger taken for the page stays quiet until it is let go, though its axis keeps reporting
+        pad.axis(axis::RTRIGGER, 0.9);
+        assert_eq!(pad.take_captured(), Some(PadButton::R2));
+        pad.set_capturing(false);
+        pad.axis(axis::RTRIGGER, 0.95);
+        assert!(!pad.held.contains(&Button::R2));
+        pad.axis(axis::RTRIGGER, 0.0);
+        pad.axis(axis::RTRIGGER, 0.9);
+        assert!(pad.held.contains(&Button::R2));
+    }
+
+    #[test]
+    fn select_held_alone_opens_the_wheel_and_letting_go_opens_the_pick() {
+        let t = Instant::now();
+        let mut pad = Gamepad::default();
+        pad.press(Button::Select);
+        assert_eq!(wheel_frame(&mut pad, t, true), None);
+        assert_eq!(pad.wheel, None);
+        wheel_frame(&mut pad, t + WHEEL_DELAY, true);
+        assert_eq!(pad.wheel, Some(None));
+        pad.axis(axis::Z, 1.0);
+        wheel_frame(&mut pad, t + WHEEL_DELAY, true);
+        assert_eq!(pad.wheel, Some(Some(2)));
+        // the stick back in the middle keeps the pick
+        pad.axis(axis::Z, 0.0);
+        wheel_frame(&mut pad, t + WHEEL_DELAY, true);
+        pad.release(Button::Select);
+        assert_eq!(wheel_frame(&mut pad, t + WHEEL_DELAY, true), Some(2));
+        assert_eq!(pad.wheel, None);
+    }
+
+    #[test]
+    fn a_chord_with_select_never_opens_the_wheel() {
+        let t = Instant::now();
+        let mut pad = Gamepad::default();
+        pad.press(Button::Select);
+        wheel_frame(&mut pad, t, true);
+        pad.press(Button::L1);
+        wheel_frame(&mut pad, t, true);
+        pad.release(Button::L1);
+        wheel_frame(&mut pad, t + WHEEL_DELAY * 2, true);
+        assert_eq!(pad.wheel, None);
+    }
+
+    #[test]
+    fn b_backs_out_of_the_open_wheel() {
+        let t = Instant::now();
+        let mut pad = Gamepad::default();
+        pad.press(Button::Select);
+        wheel_frame(&mut pad, t, true);
+        pad.axis(axis::RZ, -1.0);
+        wheel_frame(&mut pad, t + WHEEL_DELAY, true);
+        assert_eq!(pad.wheel, Some(Some(0)));
+        pad.press(Button::B);
+        wheel_frame(&mut pad, t + WHEEL_DELAY, true);
+        assert_eq!(pad.wheel, None);
+        pad.release(Button::Select);
+        assert_eq!(wheel_frame(&mut pad, t + WHEEL_DELAY, true), None);
+    }
+
+    #[test]
+    fn the_wheel_stays_shut_where_it_is_not_allowed() {
+        let t = Instant::now();
+        let mut pad = Gamepad::default();
+        pad.press(Button::Select);
+        wheel_frame(&mut pad, t, false);
+        wheel_frame(&mut pad, t + WHEEL_DELAY, false);
+        assert_eq!(pad.wheel, None);
     }
 
     #[test]

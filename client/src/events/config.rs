@@ -32,6 +32,8 @@ fn settings_values(config: &Config) -> SettingsValues {
         hud: config.hud_layout,
         keys: config.keybindings.clone(),
         chat_lines: config.shortcut_commands.clone(),
+        pad: config.pad_buttons,
+        wheel: config.pad_wheel,
     }
 }
 
@@ -50,6 +52,30 @@ impl App {
         self.config.keybindings = keys;
         self.windows.menu.set_key_labels(&self.config.keybindings);
         self.save_config_soon();
+    }
+
+    /// The Controller page moved a button: the pad reads it from the next press, the hints name it
+    pub(crate) fn apply_pad_buttons(&mut self, buttons: nostalre_game::pad::PadButtons) {
+        self.config.pad_buttons = buttons;
+        self.gamepad.set_buttons(buttons);
+        self.label_pad(buttons);
+        self.save_config_soon();
+    }
+
+    /// The menu's hints name the physical buttons that do A, B, X, Y, L1 and R1's jobs
+    pub(crate) fn label_pad(&mut self, buttons: nostalre_game::pad::PadButtons) {
+        use nostalre_game::pad::PadButton;
+        let name = |logical| buttons.physical(logical).name();
+        if let Some(ui) = &mut self.ui_context {
+            ui.pad_caps = nostalre_ui::context::PadCaps {
+                a: name(PadButton::A),
+                b: name(PadButton::B),
+                x: name(PadButton::X),
+                y: name(PadButton::Y),
+                l1: name(PadButton::L1),
+                r1: name(PadButton::R1),
+            };
+        }
     }
 
     /// Writes `config.json` once the changes stop for a moment (a volume held down steps many times), or at
