@@ -332,6 +332,13 @@ impl App {
             .last_frame
             .map_or(0.0, |t| now.duration_since(t).as_secs_f32().min(0.1));
         self.gamepad.last_frame = Some(now);
+        if self.transition.state.blocks_input() {
+            // under the loading screen: no walking, and no button acts on the map left behind or the one loading
+            self.gamepad.walk = None;
+            self.gamepad.fresh.clear();
+            self.gamepad.released.clear();
+            return;
+        }
 
         self.gamepad_aim();
         self.gamepad_cursor(event_loop, window, dt);

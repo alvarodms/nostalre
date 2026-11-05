@@ -122,8 +122,22 @@ impl App {
 
     pub(crate) fn handle_game_events(&mut self, event_loop: &ActiveEventLoop) {
         profile_function!("handle_game_events");
-        let events = self.channel.drain_events();
-        for event in events {
+        // a warp waits for the loading screen to cover the old map, and what came behind it waits with it
+        let mut events = std::mem::take(&mut self.transition.held_events)
+            .into_iter()
+            .chain(self.channel.drain_events());
+        loop {
+            if self.transition.state.holds_events() {
+                self.transition.held_events.extend(events);
+                break;
+            }
+            let Some(event) = events.next() else {
+                break;
+            };
+            if self.defer_for_transition(&event) {
+                self.transition.held_events.push(event);
+                continue;
+            }
             match event {
                 GameEvent::LoginAccepted {
                     account_id,

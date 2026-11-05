@@ -7,6 +7,19 @@ use nostalre_formats::gat::GatFile;
 use nostalre_formats::map_coordinates::MapCoordinates;
 use nostalre_renderer::Camera;
 
+/// A key, button or finger going down, or the wheel turning: what starts an action. While the loading screen is up
+/// these are dropped and the releases still go through, so nothing held stays held.
+pub(crate) fn is_press(event: &winit::event::WindowEvent) -> bool {
+    use winit::event::{ElementState, TouchPhase, WindowEvent};
+    match event {
+        WindowEvent::KeyboardInput { event, .. } => event.state == ElementState::Pressed,
+        WindowEvent::MouseInput { state, .. } => *state == ElementState::Pressed,
+        WindowEvent::MouseWheel { .. } => true,
+        WindowEvent::Touch(touch) => touch.phase == TouchPhase::Started,
+        _ => false,
+    }
+}
+
 pub struct InputState {
     pub right_mouse_down: bool,
     pub right_dragged: bool,

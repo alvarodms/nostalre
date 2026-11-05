@@ -130,7 +130,10 @@ impl App {
     }
 
     pub(crate) fn process_continuous_walk(&mut self, delta: f32) {
-        if !self.input.left_mouse_down || self.game.session.app_state != AppState::InGame {
+        if !self.input.left_mouse_down
+            || self.game.session.app_state != AppState::InGame
+            || self.transition.state.blocks_input()
+        {
             return;
         }
         if self.input.ui_dragging {

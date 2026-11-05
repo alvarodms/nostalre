@@ -755,6 +755,11 @@ pub mod ui {
         WORLDMAP = "data/texture/유저인터페이스/worldmap.bmp";
     }
 
+    /// The loading screen art, `loading00.jpg` up: how many an archive ships varies
+    pub fn loading_art(index: u32) -> String {
+        format!("data/texture/유저인터페이스/loading{index:02}.jpg")
+    }
+
     /// Shared window chrome and the in-game HUD.
     pub mod basic {
         crate::paths! {

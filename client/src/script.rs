@@ -7,7 +7,8 @@
 //! ```text
 //! wait SECONDS        pause
 //! chat TEXT           send TEXT as chat; GM commands start with @
-//! wait_map NAME       until the player stands on map NAME (gives up after 30 s)
+//! wait_map NAME       until the player stands on map NAME (gives up after 30 s); every step waits out the
+//!                     loading screen
 //! walk DX DY          walk to the cell DX, DY away from the player's
 //! zoom NOTCHES        camera zoom in mouse-wheel notches
 //! turn DEGREES        camera rotation
@@ -492,6 +493,10 @@ impl App {
         };
         script.started |= in_game;
         if !script.started {
+            return;
+        }
+        // nothing acts, and nothing is shot, under the loading screen
+        if !self.transition.state.is_idle() {
             return;
         }
         if let Some(map) = &script.map {
