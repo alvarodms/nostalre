@@ -2,6 +2,7 @@ pub mod account;
 pub mod game;
 pub mod helper;
 pub mod hud;
+pub mod loading;
 pub mod menu;
 pub mod widget_id;
 

@@ -112,6 +112,11 @@ impl MapTitleBanner {
         Self { title, age: 0.0 }
     }
 
+    /// Shown whole from the start again: one made under the loading screen counts from when the map shows
+    pub fn restart(&mut self) {
+        self.age = 0.0;
+    }
+
     /// Ages it; false once it is gone
     pub fn tick(&mut self, dt: f32) -> bool {
         self.age += dt;

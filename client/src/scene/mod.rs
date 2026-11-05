@@ -104,7 +104,7 @@ impl App {
         mut world_overlay_calls: Vec<UiDrawCall>,
         skill_level_calls: Vec<UiDrawCall>,
         ui_draw_calls: Vec<UiDrawCall>,
-        tooltip_draw_calls: Vec<UiDrawCall>,
+        mut tooltip_draw_calls: Vec<UiDrawCall>,
     ) {
         nostalre_profiling::profile_function!();
         let mut sprite_batches: Vec<SpriteBatch> = Vec::new();
@@ -1051,6 +1051,14 @@ impl App {
         insert_window_sprites(&mut all_ui_calls, overlay_len, window_sprites);
         all_ui_calls.extend(skill_level_calls);
         all_ui_calls.extend(roulette_calls);
+        // the loading screen over every window, and no cursor over it while the player can't act
+        let loading_screen = self.loading_screen_calls();
+        let hide_cursor = self.transition.state.blocks_input();
+        let covered = loading_screen.is_some();
+        if let Some(calls) = loading_screen {
+            all_ui_calls.extend(calls);
+            tooltip_draw_calls.clear();
+        }
 
         let screen_ripple = self.game.session.screen_ripple
             && self.config.show_skill_effects
@@ -1180,8 +1188,14 @@ impl App {
             }
 
             // Effects kRO draws over its windows go after the UI, under the cursor
-            let mut after_ui_batches = frame.over_ui_batches;
-            after_ui_batches.extend(cursor_batches);
+            let mut after_ui_batches = if covered {
+                Vec::new()
+            } else {
+                frame.over_ui_batches
+            };
+            if !hide_cursor {
+                after_ui_batches.extend(cursor_batches);
+            }
             renderer.render(FrameInputs {
                 ui_draw_calls: &all_ui_calls,
                 tooltip_draw_calls: &tooltip_draw_calls,

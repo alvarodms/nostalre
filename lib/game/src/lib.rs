@@ -53,6 +53,7 @@ pub mod keybinding;
 pub mod level_aura;
 pub mod lightmap;
 pub mod map_title;
+pub mod map_transition;
 pub mod mail;
 pub mod map_cloud;
 pub mod map_loader;

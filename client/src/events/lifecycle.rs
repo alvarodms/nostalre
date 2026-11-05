@@ -61,6 +61,7 @@ impl App {
                 self.game.session.progress_bar = None;
             }
             SessionChange::Logout => {
+                self.reset_map_transition();
                 self.sound_queue.clear();
                 self.sound.stop_all_sfx();
                 self.window_state_restored = false;
