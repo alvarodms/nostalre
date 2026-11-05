@@ -1,4 +1,5 @@
 use crate::Window;
+use crate::helper::key_pick::KeyPick;
 use nostalre_game::event::GameEvent;
 use nostalre_game::skill::SkillEnum;
 use nostalre_ui::draw::{self, DrawCall, TextureRef};
@@ -56,7 +57,8 @@ pub struct WarpListWindow {
     open: bool,
     skill: Option<SkillEnum>,
     destinations: Vec<Destination>,
-    selected_index: usize,
+    /// The highlighted destination: a click, a controller's D-pad or the arrows move it, A or Enter takes it
+    pick: KeyPick,
     btn_size: (f32, f32),
 }
 
@@ -81,13 +83,14 @@ impl WarpListWindow {
                 Destination { raw, display }
             })
             .collect();
-        self.selected_index = 0;
+        // the original always highlights a destination, so Enter goes straight to the first
+        self.pick.put(0);
         self.open = !self.destinations.is_empty();
     }
 
     fn confirm(&mut self, events: &mut Vec<GameEvent>) {
-        if let (Some(skill), Some(dest)) = (self.skill, self.destinations.get(self.selected_index))
-        {
+        let picked = self.pick.at().and_then(|idx| self.destinations.get(idx));
+        if let (Some(skill), Some(dest)) = (self.skill, picked) {
             events.push(GameEvent::RequestSelectWarppoint {
                 skill,
                 map_name: dest.raw.clone(),
@@ -117,13 +120,7 @@ impl WarpListWindow {
         }
         let mut events = Vec::new();
 
-        if ui.ctx.key_up && self.selected_index > 0 {
-            self.selected_index -= 1;
-        }
-        if ui.ctx.key_down && self.selected_index + 1 < self.destinations.len() {
-            self.selected_index += 1;
-        }
-        if ui.ctx.key_enter {
+        if self.pick.keys(ui, self.destinations.len(), 0).is_some() {
             self.confirm(&mut events);
             return events;
         }
@@ -178,6 +175,7 @@ impl WarpListWindow {
             [1.0, 1.0, 1.0, 1.0]
         };
 
+        let highlight = self.pick.at().filter(|_| self.pick.shows(ui));
         let mut clicked_index = None;
         for (idx, dest) in self.destinations.iter().enumerate() {
             let row_y = dy + PADDING + idx as f32 * ROW_H;
@@ -189,7 +187,7 @@ impl WarpListWindow {
             if row.clicked() {
                 clicked_index = Some(idx);
             }
-            if idx == self.selected_index {
+            if highlight == Some(idx) {
                 let (v, i) = draw::quad_vertices(
                     row_rect.x,
                     row_rect.y,
@@ -211,7 +209,7 @@ impl WarpListWindow {
             );
         }
         if let Some(idx) = clicked_index {
-            self.selected_index = idx;
+            self.pick.put(idx);
         }
 
         let win_rect = Rect::new(dx, dy, WIN_W, win_h);
@@ -278,7 +276,7 @@ mod tests {
             vec!["Random".into(), "prontera.gat".into()],
         );
         assert!(win.is_open());
-        win.selected_index = 1;
+        win.pick.put(1);
 
         let mut state = StateCache::new();
         let mut ctx = UiContext::new(800.0, 600.0);
@@ -290,6 +288,30 @@ mod tests {
         assert!(events.iter().any(|e| matches!(
             e,
             GameEvent::RequestSelectWarppoint { skill: SkillEnum::AlWarp, map_name } if map_name == "prontera.gat"
+        )));
+    }
+
+    #[test]
+    fn the_dpad_picks_the_save_point_and_a_takes_it() {
+        let mut win = WarpListWindow::new();
+        win.open(
+            SkillEnum::AlTeleport,
+            vec!["Random".into(), "prontera.gat".into()],
+        );
+        let mut state = StateCache::new();
+        let mut frame = |keys: &dyn Fn(&mut UiContext)| {
+            let mut ctx = UiContext::new(800.0, 600.0);
+            ctx.pad_labels = true;
+            keys(&mut ctx);
+            let mut ui = test_frame(&mut ctx, &mut state);
+            win.build(&mut ui)
+        };
+        frame(&|c| c.key_down = true);
+        frame(&|c| c.key_down = true);
+        let events = frame(&|c| c.key_enter = true);
+        assert!(events.iter().any(|e| matches!(
+            e,
+            GameEvent::RequestSelectWarppoint { skill: SkillEnum::AlTeleport, map_name } if map_name == "prontera.gat"
         )));
     }
 

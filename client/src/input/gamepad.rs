@@ -559,18 +559,14 @@ impl App {
             self.gamepad.menu_presses.insert(button);
             return;
         }
-        if in_game
-            && group.is_none()
-            && self.windows.npc_shop.shop.is_open()
-            && self.shop_press(button)
-        {
+        if in_game && group.is_none() && self.keys_window_open() && self.keys_press(button) {
             self.gamepad.menu_presses.insert(button);
             return;
         }
         if in_game
             && group.is_none()
-            && self.windows.npc_dialog.dialog.is_open()
-            && self.dialog_press(button)
+            && self.windows.npc_shop.shop.is_open()
+            && self.shop_press(button)
         {
             self.gamepad.menu_presses.insert(button);
             return;
@@ -631,9 +627,18 @@ impl App {
         true
     }
 
-    /// An NPC's dialog: A goes on (next, close, the chosen line), B cancels, the D-pad picks a line (arrow
-    /// keys); X and Y wait, so a press meant for the dialog attacks or talks to no one
-    fn dialog_press(&mut self, button: Button) -> bool {
+    /// A window the keys answer, over the game: an NPC's dialog, the Escape menu and the one the player dies
+    /// into (return to the save point...), a teleport's destinations
+    fn keys_window_open(&self) -> bool {
+        self.windows.npc_dialog.dialog.is_open()
+            || self.windows.system_menu.open
+            || self.windows.warp_list_window.is_open()
+    }
+
+    /// Such a window's buttons: the D-pad picks (arrow keys), A takes the pick or goes on (Enter), B backs
+    /// out (Escape); X and Y wait, so a press meant for the window attacks or picks up nothing. False for a
+    /// button left to the game (the D-pad's arrows go out as for any window)
+    fn keys_press(&mut self, button: Button) -> bool {
         match button {
             Button::A => self.with_ui(|ui| ui.key_enter = true),
             Button::B => self.with_ui(|ui| ui.key_escape = true),
@@ -647,14 +652,11 @@ impl App {
     /// the basket, its Buy and Cancel; A moves the picked line across, presses the button or answers the amount
     /// (where Left/Right step it by ten), B closes the amount or the shop, Start buys or sells; X and Y wait
     fn shop_press(&mut self, button: Button) -> bool {
-        match button {
-            Button::A => self.with_ui(|ui| ui.key_enter = true),
-            Button::B => self.with_ui(|ui| ui.key_escape = true),
-            Button::Start => self.with_ui(|ui| ui.pressed_codes.push(KeyCode::Space)),
-            Button::X | Button::Y => {}
-            _ => return false,
+        if button == Button::Start {
+            self.with_ui(|ui| ui.pressed_codes.push(KeyCode::Space));
+            return true;
         }
-        true
+        self.keys_press(button)
     }
 
     fn with_ui(&mut self, set: impl FnOnce(&mut nostalre_ui::context::UiContext)) {
