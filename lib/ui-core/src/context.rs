@@ -19,6 +19,31 @@ pub struct Finger {
     pub lifted: bool,
 }
 
+/// The controller buttons the hints name, as the player's pad has them: the physical button that does each
+/// in-game button's job after the Controller page's remapping. Standard: each its own name
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PadCaps {
+    pub a: &'static str,
+    pub b: &'static str,
+    pub x: &'static str,
+    pub y: &'static str,
+    pub l1: &'static str,
+    pub r1: &'static str,
+}
+
+impl Default for PadCaps {
+    fn default() -> Self {
+        Self {
+            a: "A",
+            b: "B",
+            x: "X",
+            y: "Y",
+            l1: "L1",
+            r1: "R1",
+        }
+    }
+}
+
 pub struct UiContext {
     pub screen_width: f32,
     pub screen_height: f32,
@@ -69,6 +94,8 @@ pub struct UiContext {
     pub lock_account_windows: bool,
     /// The last key came from a controller: hints name its buttons (A, B, L1...) instead of the keyboard's
     pub pad_labels: bool,
+    /// What those hints call each button
+    pub pad_caps: PadCaps,
     /// The fingers on the screen
     pub fingers: Vec<Finger>,
 }
@@ -118,6 +145,7 @@ impl UiContext {
             dpi_scale: 1.0,
             lock_account_windows: false,
             pad_labels: false,
+            pad_caps: PadCaps::default(),
             fingers: Vec::new(),
         }
     }

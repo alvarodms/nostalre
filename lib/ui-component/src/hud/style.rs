@@ -113,6 +113,24 @@ pub fn text_bold(ui: &mut UiFrame, x: f32, baseline: f32, content: &str, color: 
     outlined(ui, x, baseline, &bold(content), color);
 }
 
+/// Text whose outline fades with it (`color`'s alpha): for text that fades in and out
+pub fn text_fading(
+    ui: &mut UiFrame,
+    x: f32,
+    baseline: f32,
+    content: &str,
+    color: [f32; 4],
+    bold_face: bool,
+) {
+    let glyphs = if bold_face {
+        bold(content)
+    } else {
+        hud(content)
+    };
+    let outline = TextOutline::cross(faded(SHADOW, SHADOW[3] * color[3]));
+    ui.text_with_outline(x, baseline, &glyphs, color, &outline);
+}
+
 pub fn measure(ui: &UiFrame, content: &str) -> f32 {
     ui.atlas.measure_text(&hud(content))
 }
@@ -296,16 +314,23 @@ pub fn switch(ui: &mut UiFrame, x: f32, top: f32, h: f32, on: bool) -> f32 {
 
 /// A key's label in a rounded frame, as the menu's hints show them; returns its width
 pub fn key_cap(ui: &mut UiFrame, x: f32, top: f32, label: &str) -> f32 {
+    key_cap_fading(ui, x, top, label, 1.0)
+}
+
+/// A key cap at `alpha`, fading in or out
+pub fn key_cap_fading(ui: &mut UiFrame, x: f32, top: f32, label: &str, alpha: f32) -> f32 {
     let h = line(ui) - 2.0;
     let w = key_cap_width(ui, label);
     let r = (h * 0.5).floor();
-    push_white(ui, draw::rounded_rect(x, top + 1.0, w, h, r, KEY_RING));
+    let ring = faded(KEY_RING, KEY_RING[3] * alpha);
+    let fill = faded(SLOT_BG, SLOT_BG[3] * alpha);
+    push_white(ui, draw::rounded_rect(x, top + 1.0, w, h, r, ring));
     push_white(
         ui,
-        draw::rounded_rect(x + 1.0, top + 2.0, w - 2.0, h - 2.0, r - 1.0, SLOT_BG),
+        draw::rounded_rect(x + 1.0, top + 2.0, w - 2.0, h - 2.0, r - 1.0, fill),
     );
     let tx = x + ((w - measure_bold(ui, label)) / 2.0).floor();
-    text_bold(ui, tx, baseline(ui, top), label, TEXT);
+    text_fading(ui, tx, baseline(ui, top), label, faded(TEXT, alpha), true);
     w
 }
 

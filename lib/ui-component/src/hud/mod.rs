@@ -7,6 +7,7 @@ mod player;
 pub mod style;
 mod target;
 mod touch;
+mod wheel;
 
 use crate::BuildCtx;
 use crate::game::hotkey_bar::{DOCK_W, HotkeyDock};
@@ -16,6 +17,7 @@ pub use nostalre_game::display::HudLayout;
 use nostalre_ui::frame::UiFrame;
 use nostalre_ui::rect::Rect;
 pub use touch::{LEFT_COLUMN_H as TOUCH_LEFT_COLUMN_H, SlotFace, TouchInput, TouchSlots};
+pub use wheel::{WheelEntry, WheelView, icon_textures, wheel_textures};
 
 /// A cast in progress, read from the caster's entity
 #[derive(Debug, Clone, PartialEq)]
@@ -87,6 +89,10 @@ pub struct HudInput {
     pub camera: Option<CameraReadout>,
     /// What the on-screen controls' slot buttons show, while they are on screen
     pub touch_slots: TouchSlots,
+    /// The controller's wheel, while Select holds it open: drawn over the windows, either layout
+    pub wheel: Option<WheelView>,
+    /// The slot letting go of Select opened, for the wheel's closing; taken when the wheel is drawn
+    pub wheel_chosen: Option<usize>,
 }
 
 /// The windows the HUD draws in its own places: the skill rows (`hotkey_rows` of them), the minimap; a tap on
@@ -109,6 +115,7 @@ pub struct Hud {
     touch_input: TouchInput,
     hp_trail: style::Trail,
     target_trail: style::Trail,
+    wheel: wheel::Wheel,
 }
 
 impl Hud {
@@ -129,6 +136,13 @@ impl Hud {
     /// Where the on-screen controls were last drawn: a finger landing there is theirs, not the mouse
     pub fn touch_zones(&self) -> &[Rect] {
         self.touch.zones()
+    }
+
+    /// The controller's wheel (`HudInput::wheel`), over every window: open, following the stick, or still
+    /// closing
+    pub fn build_wheel(&mut self, ui: &mut UiFrame) {
+        let chosen = self.input.wheel_chosen.take();
+        self.wheel.build(ui, self.input.wheel.as_ref(), chosen);
     }
 
     /// The HUD is not drawn this frame (the menu covers it, the classic layout): no control stays held

@@ -168,6 +168,9 @@ pub fn build_in_game_ui(
         }
     }
 
+    // the controller's wheel, over every window
+    windows.hud.build_wheel(ui);
+
     storage_moves(windows, ctx.character, &mut events);
 
     windows.hotkey_bar.chat_is_active = windows.chat_window.is_active();

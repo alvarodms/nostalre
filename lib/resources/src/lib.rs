@@ -40,6 +40,7 @@ pub fn all_static_paths() -> Vec<&'static str> {
         ui::item::ALL,
         ui::login::ALL,
         ui::menu_icon::ALL,
+        ui::ro_menu_icon::ALL,
         ui::minimap::ALL,
         ui::refining::ALL,
         ui::styleshop::ALL,
@@ -920,6 +921,43 @@ pub mod ui {
             BT_SKILL_PRESS = "data/texture/유저인터페이스/menu_icon/bt_skill_press.bmp";
             BT_STATUS = "data/texture/유저인터페이스/menu_icon/bt_status.bmp";
             BT_STATUS_PRESS = "data/texture/유저인터페이스/menu_icon/bt_status_press.bmp";
+        }
+    }
+
+    /// The Renewal menu's icons without their button frame, three of each: `_1` plain, `_2` edged in gold (picked),
+    /// `_3` grey (off). The controller's wheel shows them.
+    pub mod ro_menu_icon {
+        crate::paths! {
+            EQUIP_1 = "data/texture/유저인터페이스/ro_menu_icon/equip_1.bmp";
+            EQUIP_2 = "data/texture/유저인터페이스/ro_menu_icon/equip_2.bmp";
+            EQUIP_3 = "data/texture/유저인터페이스/ro_menu_icon/equip_3.bmp";
+            GUILD_1 = "data/texture/유저인터페이스/ro_menu_icon/guild_1.bmp";
+            GUILD_2 = "data/texture/유저인터페이스/ro_menu_icon/guild_2.bmp";
+            GUILD_3 = "data/texture/유저인터페이스/ro_menu_icon/guild_3.bmp";
+            INFO_1 = "data/texture/유저인터페이스/ro_menu_icon/info_1.bmp";
+            INFO_2 = "data/texture/유저인터페이스/ro_menu_icon/info_2.bmp";
+            INFO_3 = "data/texture/유저인터페이스/ro_menu_icon/info_3.bmp";
+            ITEM_1 = "data/texture/유저인터페이스/ro_menu_icon/item_1.bmp";
+            ITEM_2 = "data/texture/유저인터페이스/ro_menu_icon/item_2.bmp";
+            ITEM_3 = "data/texture/유저인터페이스/ro_menu_icon/item_3.bmp";
+            MAP_1 = "data/texture/유저인터페이스/ro_menu_icon/map_1.bmp";
+            MAP_2 = "data/texture/유저인터페이스/ro_menu_icon/map_2.bmp";
+            MAP_3 = "data/texture/유저인터페이스/ro_menu_icon/map_3.bmp";
+            OPTION_1 = "data/texture/유저인터페이스/ro_menu_icon/option_1.bmp";
+            OPTION_2 = "data/texture/유저인터페이스/ro_menu_icon/option_2.bmp";
+            OPTION_3 = "data/texture/유저인터페이스/ro_menu_icon/option_3.bmp";
+            PARTY_1 = "data/texture/유저인터페이스/ro_menu_icon/party_1.bmp";
+            PARTY_2 = "data/texture/유저인터페이스/ro_menu_icon/party_2.bmp";
+            PARTY_3 = "data/texture/유저인터페이스/ro_menu_icon/party_3.bmp";
+            QUEST_1 = "data/texture/유저인터페이스/ro_menu_icon/quest_1.bmp";
+            QUEST_2 = "data/texture/유저인터페이스/ro_menu_icon/quest_2.bmp";
+            QUEST_3 = "data/texture/유저인터페이스/ro_menu_icon/quest_3.bmp";
+            SKILL_1 = "data/texture/유저인터페이스/ro_menu_icon/skill_1.bmp";
+            SKILL_2 = "data/texture/유저인터페이스/ro_menu_icon/skill_2.bmp";
+            SKILL_3 = "data/texture/유저인터페이스/ro_menu_icon/skill_3.bmp";
+            STATUS_1 = "data/texture/유저인터페이스/ro_menu_icon/status_1.bmp";
+            STATUS_2 = "data/texture/유저인터페이스/ro_menu_icon/status_2.bmp";
+            STATUS_3 = "data/texture/유저인터페이스/ro_menu_icon/status_3.bmp";
         }
     }
 

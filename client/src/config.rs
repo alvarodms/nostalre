@@ -26,6 +26,7 @@ impl Default for WindowStateEntry {
 pub use nostalre_game::cursor::MouseSnapPrefs;
 pub use nostalre_game::display::{DisplayOptions, HudLayout};
 pub use nostalre_game::keybinding::{EmotionKeys, KeyBindings};
+pub use nostalre_game::pad::{PadButtons, PadWheel};
 pub use nostalre_profiling::debug::PacketTrace;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -531,6 +532,12 @@ pub struct Config {
     pub keybindings: KeyBindings,
     #[serde(default)]
     pub emotion_keys: EmotionKeys,
+    /// The controller's buttons as the player moved them (`input/gamepad.rs`)
+    #[serde(default)]
+    pub pad_buttons: PadButtons,
+    /// What holding Select's wheel opens
+    #[serde(default)]
+    pub pad_wheel: PadWheel,
     /// GRF texture paths for the account-screen background. One is picked (at
     /// random) per session and stretched behind the login/server/character
     /// screens. Empty or all-missing falls back to the solid clear color.
@@ -660,6 +667,8 @@ impl Default for Config {
             shortcut_commands: default_shortcut_commands(),
             keybindings: KeyBindings::defaults(),
             emotion_keys: EmotionKeys::default(),
+            pad_buttons: PadButtons::default(),
+            pad_wheel: PadWheel::default(),
             account_backgrounds: default_account_backgrounds(),
             admin_account_ids: Vec::new(),
             see_self_as_gm_when_gm: false,

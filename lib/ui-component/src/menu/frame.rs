@@ -6,6 +6,7 @@ use nostalre_ui::context::PhysicalKeyCode as KeyCode;
 use nostalre_ui::draw::{self, DrawCall, TextureRef};
 use nostalre_ui::frame::{Response, UiFrame, WidgetId};
 use nostalre_ui::rect::Rect;
+use std::borrow::Cow;
 use std::collections::HashSet;
 
 /// The world's shade under the menu: the HUD's dark blue, nearly opaque
@@ -199,21 +200,29 @@ impl Keys {
     }
 }
 
+/// The controller's name for a hint that is not a key
+#[derive(Debug, Clone, Copy)]
+enum PadCap {
+    /// Named as it is: the D-pad
+    Fixed(&'static str),
+    /// The in-game L1 and R1, wherever the Controller page put them
+    Shoulders,
+}
+
 /// A key and what it does, at the bottom right; one with a `key` can be tapped
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Hint {
     pub cap: &'static str,
-    /// The controller's name for a hint that is not a key: the D-pad, the shoulders
-    pad: &'static str,
+    pad: PadCap,
     pub label: &'static str,
     pub key: Option<Key>,
 }
 
 impl Hint {
     pub const MOVE: Hint = Hint::shown("Arrows", "D-pad", "choose");
-    pub const TABS: Hint = Hint::shown("PgUp PgDn", "L1 R1", "tab");
+    pub const TABS: Hint = Hint::shoulders("PgUp PgDn", "tab");
     pub const MOVE_CHANGE: Hint = Hint::shown("Arrows", "D-pad", "choose, change");
-    pub const PAGES: Hint = Hint::shown("PgUp PgDn", "L1 R1", "page");
+    pub const PAGES: Hint = Hint::shoulders("PgUp PgDn", "page");
     pub const OPEN: Hint = Hint::tap("Enter", "open", Key::Enter);
     pub const CLOSE: Hint = Hint::tap("Esc", "close", Key::Back);
     pub const BACK: Hint = Hint::tap("Esc", "back", Key::Back);
@@ -225,7 +234,16 @@ impl Hint {
     const fn shown(cap: &'static str, pad: &'static str, label: &'static str) -> Self {
         Self {
             cap,
-            pad,
+            pad: PadCap::Fixed(pad),
+            label,
+            key: None,
+        }
+    }
+
+    const fn shoulders(cap: &'static str, label: &'static str) -> Self {
+        Self {
+            cap,
+            pad: PadCap::Shoulders,
             label,
             key: None,
         }
@@ -234,23 +252,27 @@ impl Hint {
     pub const fn tap(cap: &'static str, label: &'static str, key: Key) -> Self {
         Self {
             cap,
-            pad: "",
+            pad: PadCap::Fixed(""),
             label,
             key: Some(key),
         }
     }
 
     /// The cap as the player's hands know it: the controller's button after a pad press (`gamepad.rs`
-    /// `menu_press`), Android's Back for Escape
-    fn cap(&self, ui: &UiFrame) -> &'static str {
+    /// `menu_press`, by the physical button the Controller page put there), Android's Back for Escape
+    fn cap(&self, ui: &UiFrame) -> Cow<'static, str> {
+        let pad = &ui.ctx.pad_caps;
         match (ui.ctx.pad_labels, self.key) {
-            (true, Some(Key::Enter)) => "A",
-            (true, Some(Key::Back)) => "B",
-            (true, Some(Key::Remove)) => "Y",
-            (true, Some(Key::ToBar)) => "X",
-            (true, None) => self.pad,
-            (false, Some(Key::Back)) => back_key(),
-            _ => self.cap,
+            (true, Some(Key::Enter)) => pad.a.into(),
+            (true, Some(Key::Back)) => pad.b.into(),
+            (true, Some(Key::Remove)) => pad.y.into(),
+            (true, Some(Key::ToBar)) => pad.x.into(),
+            (true, None) => match self.pad {
+                PadCap::Fixed(name) => name.into(),
+                PadCap::Shoulders => format!("{} {}", pad.l1, pad.r1).into(),
+            },
+            (false, Some(Key::Back)) => back_key().into(),
+            _ => self.cap.into(),
         }
     }
 }
@@ -271,10 +293,10 @@ pub(super) fn footer(ui: &mut UiFrame, l: &Layout, help: &str, hints: &[Hint]) -
     for (i, hint) in hints.iter().enumerate().rev() {
         let label_w = style::measure(ui, hint.label);
         let cap = hint.cap(ui);
-        let cap_w = style::key_cap_width(ui, cap);
+        let cap_w = style::key_cap_width(ui, &cap);
         let w = cap_w + CAP_GAP + label_w;
         x -= w;
-        style::key_cap(ui, x, top, cap);
+        style::key_cap(ui, x, top, &cap);
         style::text(ui, x + cap_w + CAP_GAP, baseline, hint.label, style::DIM);
         if let Some(key) = hint.key {
             let rect = Rect::new(x, top, w, style::line(ui));
