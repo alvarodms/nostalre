@@ -468,6 +468,7 @@ impl App {
         self.channel
             .send_packet(build_map_loaded_packet(self.active_packetver));
         self.request_guild_data();
+        self.transition.state.map_loaded();
     }
 
     /// Drop every actor but the player. A warp is authoritative about what is
@@ -580,6 +581,7 @@ impl App {
         self.channel
             .send_packet(build_map_loaded_packet(self.active_packetver));
         self.request_guild_data();
+        self.transition.state.map_loaded();
     }
 
     pub(super) fn handle_player_moved(

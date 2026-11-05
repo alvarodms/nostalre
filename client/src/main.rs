@@ -5,6 +5,7 @@ mod effect_loader;
 mod emblem_web;
 mod events;
 mod fps_log;
+mod map_transition;
 mod game_state;
 mod game_updates;
 mod hover;
@@ -173,6 +174,8 @@ struct App {
     last_frame_instant: Instant,
     fps_smoothed: f32,
     fps_log: fps_log::FpsLog,
+    /// The loading screen between maps
+    transition: map_transition::Transition,
     /// NOSTALRE_SCRIPT: steps run on their own once in game (desktop test runs).
     script: Option<script::Script>,
     next_frame: Instant,
@@ -262,6 +265,7 @@ impl App {
             last_frame_instant: Instant::now(),
             fps_smoothed: 0.0,
             fps_log: fps_log::FpsLog::from_env(),
+            transition: map_transition::Transition::new(),
             script: script::Script::from_env(),
             next_frame: Instant::now(),
             pending_events: Vec::new(),
@@ -1002,6 +1006,11 @@ impl ApplicationHandler for App {
                         self.bgm_table =
                             nostalre_game::sound::bgm_table::parse_mp3_name_table(&text);
                     }
+                    let arts = map_transition::loading_arts(&grf);
+                    tracing::info!("loading screen: {} art(s)", arts.len());
+                    self.transition.screen = Box::new(
+                        nostalre_ui_component::loading::ClassicLoadingScreen::new(arts),
+                    );
                     let grf = std::sync::Arc::new(grf);
                     self.gr2_loader = Some(sprite::gr2_loader::Gr2Loader::spawn(grf.clone()));
                     self.grf = Some(grf);
@@ -1019,6 +1028,9 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         let event = input::touch::back_as_escape(event);
+        if self.transition.state.blocks_input() && input::is_press(&event) {
+            return;
+        }
         if let WindowEvent::KeyboardInput { event: key, .. } = &event
             && self.gamepad.key(key)
         {
@@ -1118,6 +1130,7 @@ impl ApplicationHandler for App {
                 }
                 let delta = raw_delta.min(0.1);
                 self.run_game_updates(delta, elapsed);
+                self.tick_map_transition(delta);
                 self.load_effects_in_background();
                 self.drain_sound_queue(delta);
 
@@ -1225,6 +1238,7 @@ impl ApplicationHandler for App {
                     ui_draw_calls,
                     tooltip_draw_calls,
                 );
+                self.transition.state.frame_presented();
 
                 if let Some(ui_ctx) = &mut self.ui_context {
                     ui_ctx.begin_frame();
