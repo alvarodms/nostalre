@@ -1202,6 +1202,24 @@ impl Entity {
         self.pending_death = false;
     }
 
+    /// A warp lands the unit standing with nothing over its head, as roBrowser's map change cleans
+    /// every entity and sets the player back to idle. Without it a Fly Wing's zero-time cast ack,
+    /// sent just before the warp, would carry its "Teleport !!" shout and cast pose to the new cell.
+    pub fn reset_for_warp(&mut self) {
+        self.chat_bubble = None;
+        self.clear_cast();
+        self.cast_target_gid = None;
+        self.forced_animation = None;
+        self.animation_duration = None;
+        if self.state == EntityState::Dead {
+            return;
+        }
+        self.set_state(EntityState::Standing);
+        self.state_timer = 0.0;
+        self.active_skill = None;
+        self.skill_hit_count = 0;
+    }
+
     pub fn request_pending_death(&mut self) {
         self.pending_death = true;
         if self.scheduled_hits.is_empty() {
@@ -1613,6 +1631,44 @@ mod tests {
 
     fn make_entity() -> Entity {
         Entity::new_player(1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 100, 100, 0)
+    }
+
+    #[test]
+    fn a_warp_drops_the_shout_and_cast_pose_of_a_zero_time_cast() {
+        let mut e = make_entity();
+        e.chat_bubble = Some(ChatBubbleState::new("Teleport !!".to_string()));
+        e.enter_skill_exec(0.3, SkillEnum::AlTeleport, 1);
+
+        e.reset_for_warp();
+
+        assert!(e.chat_bubble.is_none());
+        assert_eq!(e.state(), EntityState::Standing);
+        assert!(e.active_skill.is_none());
+        assert!(e.forced_animation.is_none());
+        assert!(e.animation_duration.is_none());
+    }
+
+    #[test]
+    fn a_warp_ends_a_running_cast() {
+        let mut e = make_entity();
+        e.enter_casting(2.0, SkillEnum::AlTeleport);
+        e.cast_target_gid = Some(7);
+
+        e.reset_for_warp();
+
+        assert_eq!(e.state(), EntityState::Standing);
+        assert!(e.cast_progress().is_none());
+        assert!(e.cast_target_gid.is_none());
+    }
+
+    #[test]
+    fn a_warp_leaves_a_dead_unit_dead() {
+        let mut e = make_entity();
+        e.enter_dead();
+
+        e.reset_for_warp();
+
+        assert_eq!(e.state(), EntityState::Dead);
     }
 
     #[test]

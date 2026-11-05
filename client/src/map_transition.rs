@@ -86,6 +86,11 @@ impl App {
             return false;
         };
         self.transition.state.begin(kind);
+        // the warp ends what the player was doing before the screen fades: a Fly Wing's zero-time cast ack lands
+        // just ahead of it, and its shout must not show through the cover
+        if let Some(player) = self.game.world.entities.player_mut() {
+            player.reset_for_warp();
+        }
         // a blink within the map is black only: the art is loaded for a map load (a blink can turn into one)
         if self.transition.state.kind() == TransitionKind::NewMap && !self.transition.screen_begun {
             self.transition.screen_begun = true;
