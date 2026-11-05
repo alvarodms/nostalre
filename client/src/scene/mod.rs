@@ -1051,8 +1051,9 @@ impl App {
         insert_window_sprites(&mut all_ui_calls, overlay_len, window_sprites);
         all_ui_calls.extend(skill_level_calls);
         all_ui_calls.extend(roulette_calls);
-        // the loading screen over every window; only the cursor goes over it
+        // the loading screen over every window, and no cursor over it while the player can't act
         let loading_screen = self.loading_screen_calls();
+        let hide_cursor = self.transition.state.blocks_input();
         let covered = loading_screen.is_some();
         if let Some(calls) = loading_screen {
             all_ui_calls.extend(calls);
@@ -1192,7 +1193,9 @@ impl App {
             } else {
                 frame.over_ui_batches
             };
-            after_ui_batches.extend(cursor_batches);
+            if !hide_cursor {
+                after_ui_batches.extend(cursor_batches);
+            }
             renderer.render(FrameInputs {
                 ui_draw_calls: &all_ui_calls,
                 tooltip_draw_calls: &tooltip_draw_calls,
