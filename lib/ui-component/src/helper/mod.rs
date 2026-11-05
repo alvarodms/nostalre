@@ -4,6 +4,7 @@ pub mod dropdown;
 pub mod fallback;
 pub mod format;
 pub mod head_board;
+pub mod key_pick;
 pub mod scrollbar;
 pub mod tab_control;
 pub mod window_chrome;

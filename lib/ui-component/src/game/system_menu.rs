@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use super::confirm_dialog::{ConfirmDialog, ConfirmResult};
+use crate::helper::key_pick::KeyPick;
 use crate::{BuildCtx, InGameWindow, Window};
 use nostalre_game::event::GameEvent;
 use nostalre_ui::draw::{self, DrawCall, TextureRef};
@@ -89,6 +90,8 @@ pub struct SystemMenu {
     pub can_resurrect: bool,
     pub has_grf_textures: bool,
     pending_confirm: PendingConfirm,
+    /// The button a controller's D-pad (or the arrows) is on, ringed; forgotten when the menu closes
+    pick: KeyPick,
     confirm_dialog: ConfirmDialog,
     confirm_dialog_out_param: Rc<Cell<Option<ConfirmResult>>>,
     win_size: (f32, f32),
@@ -109,6 +112,7 @@ impl SystemMenu {
             can_resurrect: false,
             has_grf_textures: false,
             pending_confirm: PendingConfirm::None,
+            pick: KeyPick::default(),
             confirm_dialog: ConfirmDialog::new(),
             confirm_dialog_out_param: Rc::new(Cell::new(None)),
             win_size: (MENU_W, MENU_H),
@@ -174,8 +178,9 @@ impl InGameWindow for SystemMenu {
         self.open
     }
 
+    /// Dead, Escape only backs out of the "Are you sure?": the menu itself stays until the player picks
     fn wants_escape(&self, _ctx: &BuildCtx) -> bool {
-        self.open && !self.dead
+        self.open && (!self.dead || self.pending_confirm != PendingConfirm::None)
     }
 
     fn on_escape(&mut self, _ctx: &mut BuildCtx) -> Vec<GameEvent> {
@@ -193,6 +198,7 @@ impl InGameWindow for SystemMenu {
         let mut events = Vec::new();
 
         if !self.open {
+            self.pick.reset();
             return events;
         }
 
@@ -226,10 +232,24 @@ impl InGameWindow for SystemMenu {
             return events;
         }
 
+        let buttons = self.buttons();
+        // the Escape menu starts on Resume, the death menu on Restart
+        let first = buttons
+            .iter()
+            .position(|&b| b == MenuButton::Resume)
+            .unwrap_or(0);
+        let pressed = self
+            .pick
+            .keys(ui, buttons.len(), first)
+            .and_then(|idx| buttons.get(idx).copied());
+        let ring = self.pick.at().filter(|_| self.pick.shows(ui));
         if self.has_grf_textures {
-            self.build_grf(ui, &mut events);
+            self.build_grf(ui, &buttons, ring, &mut events);
         } else {
-            self.build_fallback(ui, &mut events);
+            self.build_fallback(ui, &buttons, ring, &mut events);
+        }
+        if let Some(button) = pressed {
+            self.on_button_click(button, &mut events);
         }
 
         events
@@ -297,6 +317,8 @@ impl SystemMenu {
     pub fn open_dead(&mut self) {
         self.open = true;
         self.dead = true;
+        // an Escape menu left open as the player dies: its pick means nothing on the death list
+        self.pick.reset();
     }
 
     pub fn close_dead(&mut self) {
@@ -369,8 +391,13 @@ impl SystemMenu {
         ui.interact(BG_ID, screen);
     }
 
-    fn build_grf(&mut self, ui: &mut UiFrame, events: &mut Vec<GameEvent>) {
-        let buttons = self.buttons();
+    fn build_grf(
+        &mut self,
+        ui: &mut UiFrame,
+        buttons: &[MenuButton],
+        ring: Option<usize>,
+        events: &mut Vec<GameEvent>,
+    ) {
         let n = buttons.len() as f32;
         let (btn_w, btn_h) = self.btn_size;
         let (titlebar_w, titlebar_h) = self.win_size;
@@ -415,14 +442,22 @@ impl SystemMenu {
                 ui.button(button.id(), rect, button.textures(), button.label())
                     .clicked()
             };
+            if ring == Some(idx) {
+                crate::helper::focus_ring(ui, rect);
+            }
             if clicked {
                 self.on_button_click(button, events);
             }
         }
     }
 
-    fn build_fallback(&mut self, ui: &mut UiFrame, events: &mut Vec<GameEvent>) {
-        let buttons = self.buttons();
+    fn build_fallback(
+        &mut self,
+        ui: &mut UiFrame,
+        buttons: &[MenuButton],
+        ring: Option<usize>,
+        events: &mut Vec<GameEvent>,
+    ) {
         let n = buttons.len() as f32;
         let menu_h = PADDING_TOP + n * FALLBACK_BTN_H + (n - 1.0) * BTN_SPACING + PADDING_BOTTOM;
         let mx = ((ui.ctx.screen_width - MENU_W) / 2.0).floor();
@@ -456,10 +491,13 @@ impl SystemMenu {
 
         for (idx, &button) in buttons.iter().enumerate() {
             let rect = Rect::new(btn_x, btn_y(idx), FALLBACK_BTN_W, FALLBACK_BTN_H);
-            if ui
+            let clicked = ui
                 .button(button.id(), rect, &DUMMY_BTN, button.label())
-                .clicked()
-            {
+                .clicked();
+            if ring == Some(idx) {
+                crate::helper::focus_ring(ui, rect);
+            }
+            if clicked {
                 self.on_button_click(button, events);
             }
         }
@@ -717,6 +755,149 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, GameEvent::RequestStandingResurrection))
         );
+    }
+
+    /// One frame with the mouse off the menu; `keys` sets what was pressed
+    fn key_frame(
+        menu: &mut SystemMenu,
+        state: &mut StateCache,
+        keys: impl FnOnce(&mut UiContext),
+    ) -> Vec<GameEvent> {
+        let mut character = Character::new();
+        let data = DataTable::new();
+        let mut ctx = UiContext::new(800.0, 600.0);
+        keys(&mut ctx);
+        let mut ui = test_frame(&mut ctx, state);
+        menu.build(&mut ui, &mut crate::BuildCtx::test(&mut character, &data))
+    }
+
+    #[test]
+    fn a_controller_restarts_from_the_death_menu_without_the_cursor() {
+        let mut menu = SystemMenu::new();
+        menu.open_dead();
+        let mut state = StateCache::new();
+        let events = key_frame(&mut menu, &mut state, |c| {
+            c.pad_labels = true;
+            c.key_enter = true;
+        });
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, GameEvent::ReturnToSavePoint))
+        );
+    }
+
+    #[test]
+    fn the_dpad_walks_the_death_menu_and_stops_at_the_ends() {
+        let mut menu = SystemMenu::new();
+        menu.open_dead();
+        let mut state = StateCache::new();
+        let pad = |c: &mut UiContext| c.pad_labels = true;
+        key_frame(&mut menu, &mut state, |c| {
+            pad(c);
+            c.key_up = true;
+        });
+        assert_eq!(menu.pick.at(), Some(0));
+        for _ in 0..5 {
+            key_frame(&mut menu, &mut state, |c| {
+                pad(c);
+                c.key_down = true;
+            });
+        }
+        // Restart, Character Select, Quit Game
+        assert_eq!(menu.pick.at(), Some(2));
+        let events = key_frame(&mut menu, &mut state, |c| {
+            pad(c);
+            c.key_up = true;
+        });
+        assert!(events.is_empty());
+        key_frame(&mut menu, &mut state, |c| {
+            pad(c);
+            c.key_enter = true;
+        });
+        assert_eq!(menu.pending_confirm, PendingConfirm::CharacterSelect);
+    }
+
+    #[test]
+    fn the_dpad_reaches_resurrect_when_a_token_offers_it() {
+        let mut menu = SystemMenu::new();
+        menu.open_dead();
+        menu.can_resurrect = true;
+        let mut state = StateCache::new();
+        key_frame(&mut menu, &mut state, |c| {
+            c.pad_labels = true;
+            c.key_down = true;
+        });
+        let events = key_frame(&mut menu, &mut state, |c| {
+            c.pad_labels = true;
+            c.key_enter = true;
+        });
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, GameEvent::RequestStandingResurrection))
+        );
+    }
+
+    #[test]
+    fn enter_with_no_pick_showing_does_not_restart() {
+        // the Enter that sends a chat line as the player dies
+        let mut menu = SystemMenu::new();
+        menu.open_dead();
+        let mut state = StateCache::new();
+        let events = key_frame(&mut menu, &mut state, |c| c.key_enter = true);
+        assert!(events.is_empty());
+        assert!(menu.open);
+    }
+
+    #[test]
+    fn an_arrow_shows_the_pick_for_a_keyboard() {
+        let mut menu = SystemMenu::new();
+        menu.open_dead();
+        let mut state = StateCache::new();
+        key_frame(&mut menu, &mut state, |c| c.key_up = true);
+        let events = key_frame(&mut menu, &mut state, |c| c.key_enter = true);
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, GameEvent::ReturnToSavePoint))
+        );
+    }
+
+    #[test]
+    fn the_escape_menu_starts_on_resume_and_forgets_the_pick_when_closed() {
+        let mut menu = SystemMenu::new();
+        menu.open = true;
+        let mut state = StateCache::new();
+        key_frame(&mut menu, &mut state, |c| {
+            c.pad_labels = true;
+            c.key_down = true;
+        });
+        assert_eq!(menu.pick.at(), Some(1));
+        menu.open = false;
+        key_frame(&mut menu, &mut state, |_| {});
+        menu.open = true;
+        key_frame(&mut menu, &mut state, |c| {
+            c.pad_labels = true;
+            c.key_enter = true;
+        });
+        assert!(!menu.open, "Enter on the fresh pick resumes");
+    }
+
+    #[test]
+    fn escape_backs_out_of_the_death_menus_confirm_only() {
+        let mut menu = SystemMenu::new();
+        menu.open_dead();
+        menu.pending_confirm = PendingConfirm::QuitGame;
+        let mut character = Character::new();
+        let data = DataTable::new();
+        let mut ctx = crate::BuildCtx::test(&mut character, &data);
+
+        assert!(menu.wants_escape(&ctx));
+        menu.on_escape(&mut ctx);
+        assert_eq!(menu.pending_confirm, PendingConfirm::None);
+        assert!(menu.open);
+        assert!(!menu.wants_escape(&ctx));
     }
 
     #[test]
