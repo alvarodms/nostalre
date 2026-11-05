@@ -142,7 +142,7 @@ pub fn load_item_info(
     use nostalre_resources::lua::{
         ITEM_INFO_514_LUB, ITEM_INFO_EN_514_LUB, ITEM_INFO_IRO_514_LUB, ITEM_INFO_TRUE_514_LUB,
     };
-    let parse = nostalre_formats::lua_table::parse_item_info;
+    let parse = parse_item_info;
     let mut items = read_lub(grf, &[ITEM_INFO_TRUE_514_LUB, ITEM_INFO_514_LUB], parse);
     let kro = items.len();
     for table in [ITEM_INFO_IRO_514_LUB, ITEM_INFO_EN_514_LUB] {
@@ -152,6 +152,27 @@ pub fn load_item_info(
     }
     tracing::info!(items = items.len(), kro, "iteminfo loaded");
     items
+}
+
+/// An iteminfo table compiled, or as Lua source: the launcher writes the English one (`iteminfo_en.lub`) as the
+/// translation's `itemInfo.lua`, having no luac on the device, and the game's own Lua 5.1 compiles it
+fn parse_item_info(
+    data: &[u8],
+) -> Result<HashMap<u32, nostalre_formats::lua_table::ItemInfo>, nostalre_formats::lub::LubError> {
+    if nostalre_formats::lub::is_compiled_chunk(data) {
+        return nostalre_formats::lua_table::parse_item_info(data);
+    }
+    let lua = mlua::Lua::new();
+    let chunk = lua
+        .load(data)
+        .set_mode(mlua::ChunkMode::Text)
+        .into_function()
+        .map_err(|error| {
+            tracing::warn!("iteminfo source does not compile: {error}");
+            nostalre_formats::lub::LubError::NotACompiledChunk
+        })?
+        .dump(true);
+    nostalre_formats::lua_table::parse_item_info(&chunk)
 }
 
 fn add_missing_items(
@@ -364,7 +385,27 @@ mod tests {
 
     use nostalre_formats::lua_table::ItemInfo;
 
-    use super::{add_missing_items, parse_view_table, read_install_table};
+    use super::{add_missing_items, parse_item_info, parse_view_table, read_install_table};
+
+    #[test]
+    fn item_info_reads_lua_source_as_the_compiled_table() {
+        let source = br#"
+tbl = {
+	[501] = {
+		unidentifiedDisplayName = "Red Potion",
+		identifiedDisplayName = "Red Potion",
+		ClassNum = 0
+	},
+	[1270141] = { identifiedDisplayName = "New Sword", ClassNum = 2 },
+}
+function main() return true end
+"#;
+        let items = parse_item_info(source).unwrap();
+        assert_eq!(items[&501].identified_name.as_deref(), Some("Red Potion"));
+        assert_eq!(items[&1270141].identified_name.as_deref(), Some("New Sword"));
+        assert_eq!(items[&1270141].class_num, Some(2));
+        assert!(parse_item_info(b"tbl = {").is_err());
+    }
 
     #[test]
     fn an_install_table_comes_from_systemen_first_and_only_as_source() {
