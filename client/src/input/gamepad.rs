@@ -1156,11 +1156,7 @@ impl App {
             return false;
         };
         self.stop_attacking();
-        self.channel
-            .send_packet(nostalre_network::sender::build_contact_npc_packet(
-                id,
-                self.active_packetver,
-            ));
+        self.contact_npc(id);
         true
     }
 
