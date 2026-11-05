@@ -199,6 +199,8 @@ pub(crate) struct Gamepad {
     select_alone: Option<Instant>,
     /// The wheel is open, with the entry the right stick last pointed at
     wheel: Option<Option<usize>>,
+    /// The wheel's icons were loaded (the first time Select went down alone)
+    wheel_icons: bool,
     held: HashSet<Button>,
     /// Pressed since the last frame, in order.
     fresh: Vec<Button>,
@@ -892,8 +894,14 @@ impl App {
     fn gamepad_wheel(&mut self, now: Instant) {
         let allowed = self.wheel_allowed();
         let opened = self.gamepad.wheel_frame(now, allowed);
+        if self.gamepad.select_alone.is_some() && !self.gamepad.wheel_icons {
+            self.load_wheel_icons();
+        }
         let wheel = self.gamepad.wheel;
         self.windows.hud.input.wheel = wheel.map(|picked| self.wheel_view(picked));
+        if opened.is_some() {
+            self.windows.hud.input.wheel_chosen = opened;
+        }
         if let Some(action) = opened.and_then(|slot| self.config.pad_wheel.slots[slot]) {
             self.dispatch_action(action);
         }
@@ -909,18 +917,43 @@ impl App {
             && self.gamepad.aim.is_none()
     }
 
+    /// The wheel's icons, the Renewal menu's and an emote, from the game's files: loaded once, before the wheel
+    /// first opens (Select is held `WHEEL_DELAY` first)
+    fn load_wheel_icons(&mut self) {
+        let (Some(grf), Some(renderer)) = (&self.grf, &mut self.renderer) else {
+            return;
+        };
+        renderer.preload_textures(&nostalre_ui_component::hud::wheel_textures(), grf);
+        self.gamepad.wheel_icons = true;
+    }
+
     fn wheel_view(&self, picked: Option<usize>) -> nostalre_ui_component::hud::WheelView {
         let entry = |slot: usize| {
             self.config.pad_wheel.slots[slot].map(|action| nostalre_ui_component::hud::WheelEntry {
-                label: action.menu_name(),
+                action,
                 available: self.wheel_entry_works(action),
+                icon: self.wheel_icon_loaded(action),
             })
         };
         nostalre_ui_component::hud::WheelView {
             entries: std::array::from_fn::<_, WHEEL_SLOTS, _>(entry),
             picked,
+            stick: self.gamepad.stick(axis::Z, axis::RZ),
             release: self.gamepad.buttons().physical(PadButton::Select).name(),
         }
+    }
+
+    /// All three of an entry's icons are in the game's files (older ones lack the Renewal menu's)
+    fn wheel_icon_loaded(&self, action: HotkeyAction) -> bool {
+        let (Some(renderer), Some(paths)) = (
+            &self.renderer,
+            nostalre_ui_component::hud::icon_textures(action),
+        ) else {
+            return false;
+        };
+        paths
+            .iter()
+            .all(|path| renderer.texture_cache.texture_size(path).is_some())
     }
 
     /// An entry that would only say it cannot open shows dimmed

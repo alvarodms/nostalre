@@ -169,9 +169,7 @@ pub fn build_in_game_ui(
     }
 
     // the controller's wheel, over every window
-    if let Some(wheel) = &windows.hud.input.wheel {
-        nostalre_ui_component::hud::wheel(ui, wheel);
-    }
+    windows.hud.build_wheel(ui);
 
     storage_moves(windows, ctx.character, &mut events);
 
