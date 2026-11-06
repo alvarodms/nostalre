@@ -7,6 +7,7 @@ mod frame;
 mod home;
 mod item_detail;
 mod items;
+mod party;
 mod quests;
 mod settings;
 mod skills;
@@ -146,6 +147,7 @@ impl Command {
             Self::Skills => Screen::Skills,
             Self::Status => Screen::Status,
             Self::Quests => Screen::Quests,
+            Self::Party => Screen::Party,
             Self::Settings => Screen::Settings,
             _ => return None,
         })
@@ -183,6 +185,7 @@ enum Screen {
     Skills,
     Status,
     Quests,
+    Party,
     Settings,
 }
 
@@ -203,6 +206,7 @@ pub struct Menu {
     skills: skills::Skills,
     status: status::Status,
     quests: quests::Quests,
+    party: party::Party,
     settings: settings::Settings,
     textures: frame::Textures,
     /// A skill or item on its way onto the skill bar
@@ -227,6 +231,7 @@ impl Menu {
         self.items.back();
         self.equipment.back();
         self.settings.leave();
+        self.party.leave();
     }
 
     /// Settings is open and wants the client's values ([`Menu::set_settings`])
@@ -246,7 +251,12 @@ impl Menu {
 
     /// Settings is taking text (a chat line): the keys are the text's, not the game's
     pub fn is_editing_text(&self) -> bool {
-        self.open && self.screen == Screen::Settings && self.settings.is_editing()
+        self.open
+            && match self.screen {
+                Screen::Settings => self.settings.is_editing(),
+                Screen::Party => self.party.is_typing(),
+                _ => false,
+            }
     }
 
     /// The press the Keys page waited for; the bindings after it, when they changed
@@ -395,6 +405,7 @@ impl InGameWindow for Menu {
             Screen::Equipment => self.equipment.back(),
             Screen::Items => self.items.back(),
             Screen::Settings => self.settings.back(),
+            Screen::Party => self.party.back(),
             _ => false,
         };
         if left_inner {
@@ -463,6 +474,7 @@ impl InGameWindow for Menu {
                 Screen::Skills => self.skills.footer(ctx),
                 Screen::Status => self.status.footer(),
                 Screen::Quests => self.quests.footer(ctx),
+                Screen::Party => self.party.footer(ctx),
                 Screen::Settings => self.settings.footer(),
             }
         };
@@ -536,12 +548,17 @@ impl InGameWindow for Menu {
                 self.quests
                     .build(ui, ctx, area, &keys, textures, &mut events)
             }
+            Screen::Party => {
+                let here = self.place.as_ref().map(|p| p.map.as_str());
+                self.party.build(ui, ctx, area, here, &keys, &mut events)
+            }
             Screen::Settings => self.settings.build(ui, area, &keys, &mut events),
         }
         if let Some(what) = to_bar {
             self.picker = Some(BarPicker::new(what));
         }
-        if self.picker.is_some() || self.items.asking() {
+        let party_asks = self.screen == Screen::Party && self.party.asking();
+        if self.picker.is_some() || self.items.asking() || party_asks {
             // over the page: the page under it takes no taps from the next frame on
             ui.ensure_in_z_order_with(MODAL_ID, WindowOrder::Foreground);
             ui.enter_window(MODAL_ID, area);
@@ -586,6 +603,7 @@ impl Menu {
             Screen::Skills => self.skills.summary(c.skill_point),
             Screen::Status => format!("Status points {}", c.status_point),
             Screen::Quests => quests::summary(ctx.quest_log),
+            Screen::Party => party::summary(ctx.party),
         };
         (crumb, info)
     }
@@ -655,7 +673,9 @@ mod tests {
         assert!(!menu.is_open());
         assert!(menu.toggle_for(HotkeyAction::ToggleQuest));
         assert_eq!(menu.screen, Screen::Quests);
-        assert!(!menu.toggle_for(HotkeyAction::ToggleParty));
+        assert!(menu.toggle_for(HotkeyAction::ToggleParty));
+        assert_eq!(menu.screen, Screen::Party);
+        assert!(!menu.toggle_for(HotkeyAction::ToggleFriends));
     }
 
     #[test]
@@ -797,11 +817,188 @@ mod tests {
         ));
     }
 
+    /// A frame of the menu with `party` and the player's account `me`
+    fn party_frame(
+        menu: &mut Menu,
+        party: Option<&nostalre_game::party::Party>,
+        me: u32,
+        set: impl FnOnce(&mut UiContext),
+    ) -> Vec<GameEvent> {
+        let mut character = Character::new();
+        let data = DataTable::new();
+        let mut ctx = BuildCtx::test(&mut character, &data);
+        ctx.party = party;
+        ctx.local_aid = me;
+        let mut state = StateCache::new();
+        let mut ui_ctx = UiContext::new(1280.0, 720.0);
+        set(&mut ui_ctx);
+        let mut ui = test_frame(&mut ui_ctx, &mut state);
+        menu.build(&mut ui, &mut ctx)
+    }
+
+    /// "Knights": the player (1) leads, Bob (2) is online
+    fn knights() -> nostalre_game::party::Party {
+        use nostalre_game::party::{Party, PartyMember};
+        let mut party = Party::new("Knights".into());
+        let member = |aid, name: &str, leader| PartyMember {
+            aid,
+            name: name.into(),
+            online: true,
+            leader,
+            ..Default::default()
+        };
+        party.members = vec![member(1, "Me", true), member(2, "Bob", false)];
+        party
+    }
+
+    fn enter(ui: &mut UiContext) {
+        ui.key_enter = true;
+    }
+
+    fn down(ui: &mut UiContext) {
+        ui.key_down = true;
+    }
+
+    #[test]
+    fn a_member_s_actions_open_with_enter_and_make_them_leader() {
+        let party = knights();
+        let mut menu = Menu::default();
+        menu.toggle_for(HotkeyAction::ToggleParty);
+        let mut frame = |set: fn(&mut UiContext)| party_frame(&mut menu, Some(&party), 1, set);
+        frame(down);
+        assert!(frame(enter).is_empty(), "Enter opens Bob's actions");
+        frame(down);
+        let events = frame(enter);
+        assert!(matches!(
+            events.as_slice(),
+            [GameEvent::RequestChangePartyLeader { aid: 2 }]
+        ));
+    }
+
+    #[test]
+    fn expel_asks_first_and_escape_steps_back_out() {
+        let party = knights();
+        let mut menu = Menu::default();
+        menu.toggle_for(HotkeyAction::ToggleParty);
+        let mut frame = |set: fn(&mut UiContext)| party_frame(&mut menu, Some(&party), 1, set);
+        frame(down);
+        frame(enter);
+        frame(down);
+        frame(down);
+        assert!(frame(enter).is_empty(), "Expel asks");
+        let events = frame(enter);
+        assert!(matches!(
+            events.as_slice(),
+            [GameEvent::RequestExpelMember { aid: 2, .. }]
+        ));
+
+        // Escape: out of the question, then the actions, then the screen
+        frame(enter);
+        frame(down);
+        frame(down);
+        frame(enter);
+        let mut character = Character::new();
+        let data = DataTable::new();
+        let mut ctx = BuildCtx::test(&mut character, &data);
+        menu.on_escape(&mut ctx);
+        assert!(!menu.party.asking());
+        menu.on_escape(&mut ctx);
+        assert_eq!(menu.screen, Screen::Party);
+        menu.on_escape(&mut ctx);
+        assert_eq!(menu.screen, Screen::Home);
+    }
+
+    #[test]
+    fn a_whisper_is_typed_in_the_menu_which_stays_open() {
+        let party = knights();
+        let mut menu = Menu::default();
+        menu.toggle_for(HotkeyAction::ToggleParty);
+        party_frame(&mut menu, Some(&party), 1, down);
+        party_frame(&mut menu, Some(&party), 1, enter);
+        party_frame(&mut menu, Some(&party), 1, enter);
+        assert!(menu.is_editing_text());
+        party_frame(&mut menu, Some(&party), 1, |ui| {
+            ui.typed_chars = vec!['h', 'i']
+        });
+        let events = party_frame(&mut menu, Some(&party), 1, enter);
+        let [GameEvent::RequestSendWhisper { name, message }] = events.as_slice() else {
+            panic!("{events:?}");
+        };
+        assert_eq!((name.as_str(), message.as_str()), ("Bob", "hi"));
+        // ready for the next one
+        assert!(menu.is_open() && menu.is_editing_text());
+    }
+
+    #[test]
+    fn the_leader_invites_by_name_from_the_row_after_the_members() {
+        let party = knights();
+        let mut menu = Menu::default();
+        menu.toggle_for(HotkeyAction::ToggleParty);
+        party_frame(&mut menu, Some(&party), 1, down);
+        party_frame(&mut menu, Some(&party), 1, down);
+        party_frame(&mut menu, Some(&party), 1, enter);
+        assert!(menu.is_editing_text());
+        party_frame(&mut menu, Some(&party), 1, |ui| {
+            ui.typed_chars = "Carol".chars().collect()
+        });
+        let events = party_frame(&mut menu, Some(&party), 1, enter);
+        assert!(matches!(
+            events.as_slice(),
+            [GameEvent::RequestPartyInviteByName { name }] if name == "Carol"
+        ));
+        assert!(!menu.is_editing_text());
+
+        // Bob, who does not lead, has no invite row: Down wraps to the top
+        let mut bobs = Menu::default();
+        bobs.toggle_for(HotkeyAction::ToggleParty);
+        party_frame(&mut bobs, Some(&party), 2, down);
+        party_frame(&mut bobs, Some(&party), 2, down);
+        let events = party_frame(&mut bobs, Some(&party), 2, enter);
+        assert!(events.is_empty());
+        assert!(
+            !bobs.is_editing_text(),
+            "on the first row, not an invite field"
+        );
+    }
+
+    #[test]
+    fn out_of_a_party_the_form_makes_one() {
+        let mut menu = Menu::default();
+        menu.toggle_for(HotkeyAction::ToggleParty);
+        // Create with no name goes back to the name
+        for _ in 0..3 {
+            party_frame(&mut menu, None, 1, down);
+        }
+        assert!(party_frame(&mut menu, None, 1, enter).is_empty());
+        party_frame(&mut menu, None, 1, enter);
+        assert!(menu.is_editing_text());
+        party_frame(&mut menu, None, 1, |ui| {
+            ui.typed_chars = "Knights".chars().collect()
+        });
+        party_frame(&mut menu, None, 1, enter);
+        party_frame(&mut menu, None, 1, down);
+        party_frame(&mut menu, None, 1, |ui| ui.key_right = true);
+        party_frame(&mut menu, None, 1, down);
+        party_frame(&mut menu, None, 1, down);
+        let events = party_frame(&mut menu, None, 1, enter);
+        assert!(matches!(
+            events.as_slice(),
+            [GameEvent::RequestPartyCreate {
+                name,
+                item_pickup_rule: 1,
+                item_division_rule: 0,
+            }] if name == "Knights"
+        ));
+    }
+
     #[test]
     fn enter_on_a_window_command_opens_that_window_and_closes_the_menu() {
         let mut menu = Menu::default();
         menu.open();
-        menu.cursor = COMMANDS.iter().position(|&c| c == Command::Party).unwrap();
+        menu.cursor = COMMANDS
+            .iter()
+            .position(|&c| c == Command::Friends)
+            .unwrap();
         let events = frame_with(&mut menu, |ui| ui.key_enter = true);
         // opened, never closed: the client leaves an open window as it is
         let [GameEvent::OpenWindow(window)] = events.as_slice() else {
@@ -810,7 +1007,7 @@ mod tests {
         assert!(matches!(
             **window,
             GameEvent::RunHotkeyAction {
-                action: HotkeyAction::ToggleParty
+                action: HotkeyAction::ToggleFriends
             }
         ));
         assert!(!menu.is_open());
