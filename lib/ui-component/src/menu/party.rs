@@ -294,7 +294,10 @@ impl Party {
 
     fn form_footer(&self) -> (String, Vec<Hint>) {
         let (help, verb) = match self.form.picked {
-            FORM_NAME => ("The party's name, as its members see it.", "edit"),
+            FORM_NAME => (
+                "The party's name, as its members see it. Left empty, a random one.",
+                "edit",
+            ),
             FORM_PICKUP => (PICKUP_HELP, "change"),
             FORM_DIVISION => (DIVISION_HELP, "change"),
             _ => ("Make the party, led by you.", "create"),
@@ -604,7 +607,7 @@ impl Party {
             && *to == m.name
         {
             y = frame::section(ui, area.x, y, area.w, "Message");
-            field(ui, Rect::new(area.x, y, area.w, ROW_H), Some(input), "");
+            field(ui, Rect::new(area.x, y, area.w, ROW_H), Some(input), "", "");
         }
         tapped
     }
@@ -629,7 +632,7 @@ impl Party {
         };
         let rect = Rect::new(area.x, y, area.w, ROW_H);
         let resp = ui.interact(WidgetId(ACTION_BASE_ID), rect);
-        field(ui, rect, input, "Enter to type a name");
+        field(ui, rect, input, "", "Enter to type a name");
         if resp.clicked() && input.is_none() && !self.asking() {
             self.typing = Some(Typing::new(Field::Invite, NAME_MAX, ""));
             self.note = None;
@@ -723,7 +726,7 @@ impl Party {
             match i {
                 FORM_NAME => {
                     style::text(ui, rect.x + ROW_TEXT, baseline, "Name", style::TEXT);
-                    field(ui, value, typing, &form.name);
+                    field(ui, value, typing, &form.name, "Random");
                 }
                 FORM_PICKUP | FORM_DIVISION => {
                     let (label, value) = if i == FORM_PICKUP {
@@ -757,17 +760,18 @@ impl Party {
             FORM_PICKUP if act || turn => form.pickup ^= 1,
             FORM_DIVISION if act || turn => form.division ^= 1,
             FORM_CREATE if act => {
-                if form.name.is_empty() {
-                    form.picked = FORM_NAME;
-                    self.note = Some("Name the party first.".into());
+                // no name: a new random one each try, should the server find one taken
+                let name = if form.name.is_empty() {
+                    random_name(seed())
                 } else {
-                    events.push(GameEvent::RequestPartyCreate {
-                        name: form.name.clone(),
-                        item_pickup_rule: form.pickup,
-                        item_division_rule: form.division,
-                    });
-                    self.note = Some(format!("Making {}…", form.name));
-                }
+                    form.name.clone()
+                };
+                self.note = Some(format!("Making {name}…"));
+                events.push(GameEvent::RequestPartyCreate {
+                    name,
+                    item_pickup_rule: form.pickup,
+                    item_division_rule: form.division,
+                });
             }
             _ => {}
         }
@@ -781,6 +785,46 @@ impl Party {
             ty += line;
         }
     }
+}
+
+/// A party made without a name is called "Adjective Noun", 256 in all, each under `NAME_MAX`
+const ADJECTIVES: [&str; 16] = [
+    "Brave", "Swift", "Lucky", "Merry", "Bold", "Quiet", "Wild", "Golden", "Silver", "Crimson",
+    "Gentle", "Clever", "Stout", "Nimble", "Jolly", "Fierce",
+];
+const NOUNS: [&str; 16] = [
+    "Porings",
+    "Lunatics",
+    "Fabres",
+    "Drops",
+    "Rockers",
+    "Pecopecos",
+    "Wolves",
+    "Hornets",
+    "Thieves",
+    "Wanderers",
+    "Knights",
+    "Pilgrims",
+    "Rangers",
+    "Travellers",
+    "Sparrows",
+    "Foxes",
+];
+
+/// A party name from `seed`
+fn random_name(seed: u64) -> String {
+    let adjective = ADJECTIVES[(seed % 16) as usize];
+    let noun = NOUNS[(seed / 16 % 16) as usize];
+    format!("{adjective} {noun}")
+}
+
+/// A seed for [`random_name`]: the clock, mixed
+fn seed() -> u64 {
+    use std::hash::{BuildHasher, RandomState};
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    RandomState::new().hash_one(nanos)
 }
 
 /// A map name as both the party list and the player's place carry it: no extension
@@ -870,16 +914,17 @@ fn invite_row(ui: &mut UiFrame, id: WidgetId, rect: Rect, picked: bool) -> Respo
     resp
 }
 
-/// A one-line text field: what is being typed with its cursor, else `shown` (or a dash)
-fn field(ui: &mut UiFrame, rect: Rect, input: Option<&TextInput>, shown: &str) {
+/// A one-line text field: what is being typed with its cursor, else `shown`, else `placeholder` dimmed (or a
+/// dash)
+fn field(ui: &mut UiFrame, rect: Rect, input: Option<&TextInput>, shown: &str, placeholder: &str) {
     let baseline = frame::row_baseline(ui, rect);
     let line = style::line(ui);
     let top = rect.y + ((rect.h - line) / 2.0).floor();
     let Some(input) = input else {
-        let (text, color) = if shown.is_empty() {
-            ("—", style::DIM)
-        } else {
-            (shown, style::TEXT)
+        let (text, color) = match (shown, placeholder) {
+            ("", "") => ("—", style::DIM),
+            ("", placeholder) => (placeholder, style::DIM),
+            (shown, _) => (shown, style::TEXT),
         };
         let text = style::fit(ui, text, rect.w);
         style::text(ui, rect.x, baseline, &text, color);
@@ -920,6 +965,17 @@ mod tests {
         let away = member(3, false, false);
         assert_eq!(actions(&away, 1, true), [Action::Expel]);
         assert!(actions(&away, 1, false).is_empty());
+    }
+
+    #[test]
+    fn a_random_name_reads_as_two_words_and_fits() {
+        let names: std::collections::HashSet<_> = (0..256).map(random_name).collect();
+        assert_eq!(names.len(), 256, "every seed below 256 a different name");
+        for name in &names {
+            assert!(name.len() <= NAME_MAX, "{name}");
+            let words: Vec<_> = name.split(' ').collect();
+            assert!(ADJECTIVES.contains(&words[0]) && NOUNS.contains(&words[1]));
+        }
     }
 
     #[test]

@@ -965,11 +965,18 @@ mod tests {
     fn out_of_a_party_the_form_makes_one() {
         let mut menu = Menu::default();
         menu.toggle_for(HotkeyAction::ToggleParty);
-        // Create with no name goes back to the name
+        // Create with no name makes up one
         for _ in 0..3 {
             party_frame(&mut menu, None, 1, down);
         }
-        assert!(party_frame(&mut menu, None, 1, enter).is_empty());
+        let events = party_frame(&mut menu, None, 1, enter);
+        let [GameEvent::RequestPartyCreate { name, .. }] = events.as_slice() else {
+            panic!("{events:?}");
+        };
+        assert_eq!(name.split(' ').count(), 2, "{name}");
+
+        // or the one typed
+        party_frame(&mut menu, None, 1, down);
         party_frame(&mut menu, None, 1, enter);
         assert!(menu.is_editing_text());
         party_frame(&mut menu, None, 1, |ui| {
