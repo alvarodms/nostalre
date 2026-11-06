@@ -1315,6 +1315,10 @@ pub fn run(event_loop: EventLoop<()>) {
     app.save_player_snapshot();
 }
 
+/// What the log keeps without RUST_LOG: the game's info, the graphics and sound libraries' warnings (their info is a
+/// line per pipeline or file)
+const DEFAULT_LOG: &str = "info,wgpu_core=warn,wgpu_hal=warn,naga=warn,symphonia=warn";
+
 fn init_logging<W>(writer: W)
 where
     W: for<'w> tracing_subscriber::fmt::MakeWriter<'w> + Send + Sync + 'static,
@@ -1322,7 +1326,7 @@ where
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(DEFAULT_LOG)),
         )
         .with_writer(writer)
         // Android keeps the library loaded between game sessions: the second run finds it set up

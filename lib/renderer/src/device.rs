@@ -49,7 +49,13 @@ impl RenderDevice {
             .unwrap();
 
         let info = adapter.get_info();
-        tracing::info!("GPU: {} ({:?})", info.name, info.backend);
+        tracing::info!(
+            "GPU: {} ({:?}), driver {} {}",
+            info.name,
+            info.backend,
+            info.driver,
+            info.driver_info
+        );
 
         let required_limits = wgpu::Limits::default().using_resolution(adapter.limits());
         let (device, queue) = adapter

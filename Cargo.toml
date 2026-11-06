@@ -31,7 +31,8 @@ resolver = "2"
 # Needed by server's models crate (workspace = true)
 
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
+# tracing-log: wgpu, naga and others log through the `log` crate; without it their warnings never reach the log
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "tracing-log"] }
 # Needed by server's packets crate (workspace = true)
 byteorder = "1.5.0"
 json-flat-parser = "0.1.0"

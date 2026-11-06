@@ -5,6 +5,7 @@ mod device;
 pub mod effect;
 pub mod effect_sprite;
 pub mod font_atlas;
+mod frame_trace;
 pub mod fps;
 pub mod global_uniforms;
 pub mod gr2_model;
@@ -281,6 +282,8 @@ pub struct Renderer {
     filter_effects: bool,
     /// Effect textures uploaded so far, so a filter change can rebuild them.
     effect_textures: Vec<String>,
+    /// NOSTALRE_FRAME_TRACE: what each frame hands the GPU, in the log
+    frame_trace: Option<frame_trace::FrameTrace>,
 }
 
 /// The view planes the fog table's `near`/`far` columns are fractions of. Not
@@ -536,6 +539,7 @@ impl Renderer {
             hd_water: true,
             filter_effects: true,
             effect_textures: Vec::new(),
+            frame_trace: frame_trace::FrameTrace::from_env(),
         }
     }
 
@@ -1301,13 +1305,17 @@ impl Renderer {
         nostalre_profiling::profile_function!();
         let output = match self.device.surface.get_current_texture() {
             Ok(tex) => tex,
-            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                self.device.reconfigure_surface();
-                return;
-            }
-            Err(wgpu::SurfaceError::Timeout) => return,
             Err(e) => {
-                tracing::error!("Surface error: {e}");
+                if let Some(trace) = &mut self.frame_trace {
+                    trace.skipped(&e.to_string(), std::time::Instant::now());
+                }
+                match e {
+                    wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
+                        self.device.reconfigure_surface()
+                    }
+                    wgpu::SurfaceError::Timeout => {}
+                    e => tracing::error!("Surface error: {e}"),
+                }
                 return;
             }
         };
@@ -1408,6 +1416,12 @@ impl Renderer {
             elapsed,
             delta,
         } = frame;
+        if let Some(trace) = &mut self.frame_trace {
+            trace.frame(
+                frame_trace::SpriteCount::of(sprite_batches),
+                std::time::Instant::now(),
+            );
+        }
         let logical_w = physical_w as f32 / self.dpi_scale;
         let logical_h = physical_h as f32 / self.dpi_scale;
         self.camera.aspect = physical_w as f32 / physical_h as f32;

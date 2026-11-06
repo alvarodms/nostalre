@@ -174,14 +174,16 @@ impl<V: bytemuck::Pod> MeshBatcher<V> {
         }
         let vertex_bytes: &[u8] = bytemuck::cast_slice(&self.vertices);
         if vertex_bytes.len() as u64 > self.vertex_buffer.size() {
-            self.vertex_buffer =
-                Self::vertex_buffer(device, self.label, self.vertices.len().next_power_of_two());
+            let count = self.vertices.len().next_power_of_two();
+            tracing::info!("{}: vertex buffer grown to {count}", self.label);
+            self.vertex_buffer = Self::vertex_buffer(device, self.label, count);
         }
         queue.write_buffer(&self.vertex_buffer, 0, vertex_bytes);
         let index_bytes: &[u8] = bytemuck::cast_slice(&self.indices);
         if index_bytes.len() as u64 > self.index_buffer.size() {
-            self.index_buffer =
-                Self::index_buffer(device, self.label, self.indices.len().next_power_of_two());
+            let count = self.indices.len().next_power_of_two();
+            tracing::info!("{}: index buffer grown to {count}", self.label);
+            self.index_buffer = Self::index_buffer(device, self.label, count);
         }
         queue.write_buffer(&self.index_buffer, 0, index_bytes);
     }
