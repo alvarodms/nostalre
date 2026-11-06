@@ -223,6 +223,7 @@ impl Hint {
     pub const TABS: Hint = Hint::shoulders("PgUp PgDn", "tab");
     pub const MOVE_CHANGE: Hint = Hint::shown("Arrows", "D-pad", "choose, change");
     pub const PAGES: Hint = Hint::shoulders("PgUp PgDn", "page");
+    pub const LEVEL: Hint = Hint::shoulders("PgUp PgDn", "level");
     pub const OPEN: Hint = Hint::tap("Enter", "open", Key::Enter);
     pub const CLOSE: Hint = Hint::tap("Esc", "close", Key::Back);
     pub const BACK: Hint = Hint::tap("Esc", "back", Key::Back);
