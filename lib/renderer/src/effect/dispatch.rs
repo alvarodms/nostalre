@@ -33,13 +33,13 @@ impl EffectDispatcher {
         Vec::with_capacity(self.last_records)
     }
 
+    /// `records` batched, uploaded and drawn in `pass`: the frame's scene pass, begun elsewhere with the depth
+    /// attachment (one pass for the scene: [`SpriteRenderer::draw_in`])
     #[allow(clippy::too_many_arguments)]
-    pub fn dispatch<'tex>(
+    pub fn draw_in<'tex>(
         &mut self,
         records: &[DrawRecord<'tex>],
-        encoder: &mut wgpu::CommandEncoder,
-        target_view: &wgpu::TextureView,
-        depth_view: &wgpu::TextureView,
+        pass: &mut wgpu::RenderPass<'_>,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         camera_bind_group: &wgpu::BindGroup,
@@ -53,30 +53,7 @@ impl EffectDispatcher {
             return;
         }
         self.meshes.upload(device, queue);
-
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("effect_unified"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target_view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: depth_view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            ..Default::default()
-        });
-
-        self.meshes.bind(&mut pass);
+        self.meshes.bind(pass);
 
         let mut current_kind: Option<PipelineKind> = None;
         let mut current_bucket: Option<BlendBucket> = None;
