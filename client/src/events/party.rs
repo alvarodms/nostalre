@@ -137,7 +137,10 @@ impl App {
 
     pub(super) fn handle_party_create_result(&mut self, result: u8) {
         if result == 0 {
-            self.windows.party_friends_window.open = true;
+            // the frameless HUD's menu shows the new party on its own screen
+            if !self.windows.hud.is_modern() {
+                self.windows.party_friends_window.open = true;
+            }
             // The party now exists server-side; send any invite that was deferred
             // while waiting for this ack.
             if let Some(aid) = self.game.pending_confirms.pending_invite_aid.take() {
