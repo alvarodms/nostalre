@@ -25,9 +25,10 @@ impl App {
 }
 
 /// What the menu's Settings shows of `config`
-fn settings_values(config: &Config) -> SettingsValues {
+fn settings_values(config: &Config, gpu: String) -> SettingsValues {
     SettingsValues {
         graphics: config.graphics(),
+        gpu,
         sound: config.sound(),
         hud: config.hud_layout,
         keys: config.keybindings.clone(),
@@ -41,8 +42,13 @@ impl App {
     /// The menu's Settings reads the config each time it opens; its resets go back to a fresh config's values
     pub(crate) fn fill_menu_settings(&mut self) {
         if self.windows.menu.wants_settings() {
-            let now = settings_values(&self.config);
-            let defaults = settings_values(&Config::default());
+            let gpu = self
+                .renderer
+                .as_ref()
+                .map(|r| r.gpu_label())
+                .unwrap_or_default();
+            let now = settings_values(&self.config, gpu.clone());
+            let defaults = settings_values(&Config::default(), gpu);
             self.windows.menu.set_settings(now, defaults);
         }
     }
@@ -153,6 +159,7 @@ impl App {
             filter_sprites,
             sprite_upscale,
             hd,
+            backend,
         } = settings;
         let hd_changed = hd != self.config.custom.hd;
         let fullscreen_changed = fullscreen != self.config.fullscreen;
@@ -197,6 +204,18 @@ impl App {
                     ui_ctx.screen_height = phys_h / new_dpi;
                 }
             }
+        }
+        if backend != self.config.custom.backend {
+            self.config.custom.backend = backend;
+            let message = match self.renderer.as_ref() {
+                Some(renderer) => format!(
+                    "Graphics backend: {}, applies on restart (now {}).",
+                    backend.label(),
+                    renderer.gpu_label()
+                ),
+                None => format!("Graphics backend: {}, applies on restart.", backend.label()),
+            };
+            self.windows.chat_window.add_system(message);
         }
         if hd_changed {
             let running = self.renderer.as_ref().is_some_and(|r| r.hd_running());

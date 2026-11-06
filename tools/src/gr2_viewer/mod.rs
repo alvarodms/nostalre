@@ -342,7 +342,10 @@ impl ApplicationHandler for App {
                 self.args.height,
             ));
         let window = Arc::new(event_loop.create_window(attrs).unwrap());
-        let device = block_on(RenderDevice::new(window.clone()));
+        let device = block_on(RenderDevice::new(
+            window.clone(),
+            nostalre_renderer::wgpu::Backends::all(),
+        ));
 
         let grf = match GrfArchive::open(Path::new(&self.args.grf_path)) {
             Ok(g) => g,

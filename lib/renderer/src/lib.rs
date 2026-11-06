@@ -335,8 +335,9 @@ impl Renderer {
         font_px_height: f32,
         dpi_scale: f32,
         hd: post::HdOptions,
+        backends: wgpu::Backends,
     ) -> Self {
-        let device = RenderDevice::new(window).await;
+        let device = RenderDevice::new(window, backends).await;
         let float_supported = post::float_target_supported(
             &device
                 .adapter
@@ -564,6 +565,11 @@ impl Renderer {
 
     pub fn world_format(&self) -> wgpu::TextureFormat {
         self.world_format
+    }
+
+    /// The API and the GPU drawing, as Settings shows them: `Vulkan · Mali-G77 MC9`
+    pub fn gpu_label(&self) -> String {
+        self.device.gpu_label()
     }
 
     /// Whether HD runs this session (fixed at startup: the scene pipelines are built for its target).

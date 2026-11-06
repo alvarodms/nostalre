@@ -260,7 +260,10 @@ impl<F: FnMut(&mut ExampleCtx)> ApplicationHandler for UiExampleApp<F> {
             .with_inner_size(winit::dpi::PhysicalSize::new(self.width, self.height));
 
         let window = Arc::new(event_loop.create_window(attrs).unwrap());
-        let device = block_on(RenderDevice::new(window.clone()));
+        let device = block_on(RenderDevice::new(
+            window.clone(),
+            nostalre_renderer::wgpu::Backends::all(),
+        ));
         let dpi_scale = 1.5_f32;
         let mut tex_cache = TextureCache::new(&device.device);
 

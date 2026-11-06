@@ -8,6 +8,7 @@ mod fps_log;
 mod map_transition;
 mod game_state;
 mod game_updates;
+mod gpu_backend;
 mod hover;
 mod input;
 mod input_action;
@@ -174,6 +175,8 @@ struct App {
     last_frame_instant: Instant,
     fps_smoothed: f32,
     fps_log: fps_log::FpsLog,
+    /// Takes the Settings' graphics backend back to Auto when a start with it never reaches a map
+    backend_guard: gpu_backend::StartGuard,
     /// The loading screen between maps
     transition: map_transition::Transition,
     /// NOSTALRE_SCRIPT: steps run on their own once in game (desktop test runs).
@@ -265,6 +268,7 @@ impl App {
             last_frame_instant: Instant::now(),
             fps_smoothed: 0.0,
             fps_log: fps_log::FpsLog::from_env(),
+            backend_guard: Default::default(),
             transition: map_transition::Transition::new(),
             script: script::Script::from_env(),
             next_frame: Instant::now(),
@@ -822,6 +826,17 @@ impl ApplicationHandler for App {
         } else {
             os_scale
         };
+        let (guard, fell_back) =
+            gpu_backend::StartGuard::begin(Path::new("."), &mut self.config.custom.backend);
+        self.backend_guard = guard;
+        if fell_back {
+            tracing::warn!("the graphics backend never reached a map last start: Auto");
+            self.config.save("config.json");
+            self.windows.chat_window.add_system(
+                "Graphics backend: the last start with it did not reach a map, back to Auto."
+                    .to_string(),
+            );
+        }
         let mut renderer = block_on(Renderer::new(
             window.clone(),
             self.config.font_px_height(),
@@ -841,6 +856,7 @@ impl ApplicationHandler for App {
                 shadow_strength: self.config.custom.hd.shadow_strength(),
                 shadow_tier: self.config.custom.hd.shadow_tier(),
             },
+            gpu_backend::backends(self.config.custom.backend),
         ));
         renderer.set_fog_scale(self.config.custom.fog_scale);
         renderer.set_world_filtering(self.config.custom.filtering.world, None);
@@ -1117,6 +1133,8 @@ impl ApplicationHandler for App {
                 }
                 let now = Instant::now();
                 self.fps_log.frame(now);
+                self.backend_guard
+                    .frame(self.game.session.app_state == AppState::InGame, now);
                 self.run_script(now, event_loop);
                 let raw_delta = now.duration_since(self.last_frame_instant).as_secs_f32();
                 self.last_frame_instant = now;

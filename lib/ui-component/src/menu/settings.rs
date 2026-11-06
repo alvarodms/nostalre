@@ -5,7 +5,7 @@ use super::{ROW_BASE_ID, SETTINGS_KEY_BASE_ID, SETTINGS_PAGE_BASE_ID, SETTINGS_R
 use crate::game::graphic_options::{UI_SCALE_LABELS, UI_SCALE_OPTIONS, ui_scale_index};
 use crate::game::shortcut_list_window::{LINE_MAX, SLOT_COUNT};
 use crate::hud::style;
-use nostalre_game::display::{GraphicsSettings, HudLayout, SoundSettings};
+use nostalre_game::display::{GraphicsBackend, GraphicsSettings, HudLayout, SoundSettings};
 use nostalre_game::event::GameEvent;
 use nostalre_game::hd::HdPreset;
 use nostalre_game::keybinding::{HotkeyAction, KeyBindings, KeyChord};
@@ -58,6 +58,8 @@ const PAD_CAPTURE_MS: u64 = 5000;
 #[derive(Debug, Clone, Default)]
 pub struct SettingsValues {
     pub graphics: GraphicsSettings,
+    /// The API and the GPU drawing now (`Vulkan · Mali-G77 MC9`), said under Graphics backend
+    pub gpu: String,
     pub sound: SoundSettings,
     pub hud: HudLayout,
     pub keys: KeyBindings,
@@ -74,6 +76,7 @@ enum Opt {
     Fullscreen,
     Scale,
     Hud,
+    Backend,
     FilterWorld,
     FilterEffects,
     FilterSprites,
@@ -140,6 +143,7 @@ impl Opt {
             Self::Fullscreen => "Full screen",
             Self::Scale => "Interface scale",
             Self::Hud => "HUD",
+            Self::Backend => "Graphics backend",
             Self::FilterWorld => "Map textures",
             Self::FilterEffects => "Effect textures",
             Self::FilterSprites => "Sprite textures",
@@ -190,6 +194,9 @@ impl Opt {
             Self::Hud => {
                 "Frameless: nostalRE's HUD and this menu. Classic: kRO's windows (closes this menu)."
             }
+            Self::Backend => {
+                "Vulkan or OpenGL ES; Auto: Vulkan where there is one. Applies on restart."
+            }
             Self::FilterWorld => "Smooth ground and model textures. Off: sharp pixels.",
             Self::FilterEffects => "Smooth skill and effect textures.",
             Self::FilterSprites => "Smooth characters and monsters.",
@@ -236,7 +243,7 @@ impl Opt {
     /// What Enter does to it; a volume moves with left and right only
     fn verb(self) -> Option<&'static str> {
         match self {
-            Self::Scale | Self::Hud | Self::HdQuality => Some("change"),
+            Self::Scale | Self::Hud | Self::Backend | Self::HdQuality => Some("change"),
             Self::Music
             | Self::Effects
             | Self::Bloom
@@ -300,6 +307,7 @@ impl Opt {
             Self::DayCycle => &mut g.hd.day_cycle,
             Self::Scale
             | Self::Hud
+            | Self::Backend
             | Self::Music
             | Self::Effects
             | Self::HdQuality
@@ -361,6 +369,7 @@ impl Opt {
         }
         Shown::Choice(match self {
             Self::Hud => hud_label(v.hud),
+            Self::Backend => v.graphics.backend.label(),
             Self::HdQuality => hd_quality_label(v.graphics.hd.preset),
             _ => UI_SCALE_LABELS[ui_scale_index(v.graphics.ui_scale)],
         })
@@ -399,6 +408,17 @@ impl Opt {
                     (Change::Next, _) | (Change::Flip, HudLayout::Modern) => HudLayout::Classic,
                 };
                 v.hud != old
+            }
+            Self::Backend => {
+                let old = v.graphics.backend;
+                let all = GraphicsBackend::ALL;
+                let at = all.iter().position(|b| *b == old).unwrap_or(0);
+                v.graphics.backend = all[match how {
+                    Change::Prev => at.saturating_sub(1),
+                    Change::Next => (at + 1).min(all.len() - 1),
+                    Change::Flip => (at + 1) % all.len(),
+                }];
+                v.graphics.backend != old
             }
             Self::HdQuality => {
                 let old = v.graphics.hd.preset;
@@ -440,6 +460,10 @@ impl Opt {
         }
         match self {
             Self::Hud => std::mem::replace(&mut v.hud, defaults.hud) != defaults.hud,
+            Self::Backend => {
+                let backend = defaults.graphics.backend;
+                std::mem::replace(&mut v.graphics.backend, backend) != backend
+            }
             Self::HdQuality => {
                 let preset = defaults.graphics.hd.preset;
                 std::mem::replace(&mut v.graphics.hd.preset, preset) != preset
@@ -628,6 +652,8 @@ impl Page {
         match self {
             Self::Display => &[S("Screen"), O(Opt::Fullscreen), O(Opt::Scale), O(Opt::Hud)],
             Self::Graphics => &[
+                S("Renderer"),
+                O(Opt::Backend),
                 S("Smoothing"),
                 O(Opt::FilterWorld),
                 O(Opt::FilterEffects),
@@ -916,7 +942,7 @@ impl Settings {
             ),
             Page::Controller => (self.pad_help(), Some("change")),
             page => match page.opts().nth(self.picked) {
-                Some(opt) => (opt.help().to_string(), opt.verb()),
+                Some(opt) => (self.opt_help(opt), opt.verb()),
                 None => (String::new(), None),
             },
         };
@@ -1233,6 +1259,17 @@ impl Settings {
     }
 
     /// The Controller page's help line for the picked row
+    /// `opt`'s help line; Graphics backend's also says what draws now, as a pick only applies on restart
+    fn opt_help(&self, opt: Opt) -> String {
+        let gpu = self.values.as_ref().map(|v| v.now.gpu.as_str());
+        match gpu {
+            Some(gpu) if opt == Opt::Backend && !gpu.is_empty() => {
+                format!("{} Now: {gpu}.", opt.help())
+            }
+            _ => opt.help().to_string(),
+        }
+    }
+
     fn pad_help(&self) -> String {
         let select = self
             .values
@@ -1714,6 +1751,39 @@ mod tests {
         assert!(Opt::Hud.change(&mut v, Change::Next));
         assert_eq!(v.hud, HudLayout::Classic);
         assert!(!Opt::Hud.change(&mut v, Change::Next));
+    }
+
+    #[test]
+    fn the_backend_steps_auto_vulkan_opengl_and_stops_at_its_ends() {
+        let mut v = values();
+        assert!(matches!(Opt::Backend.shown_value(&mut v), Shown::Choice("Auto")));
+        assert!(!Opt::Backend.change(&mut v, Change::Prev));
+        assert!(Opt::Backend.change(&mut v, Change::Next));
+        assert!(Opt::Backend.change(&mut v, Change::Next));
+        assert_eq!(v.graphics.backend, GraphicsBackend::Gl);
+        assert!(matches!(Opt::Backend.shown_value(&mut v), Shown::Choice("OpenGL ES")));
+        assert!(!Opt::Backend.change(&mut v, Change::Next));
+        assert!(Opt::Backend.change(&mut v, Change::Flip));
+        assert_eq!(v.graphics.backend, GraphicsBackend::Auto, "Enter goes round");
+        v.graphics.backend = GraphicsBackend::Gl;
+        assert!(Opt::Backend.reset(&mut v, &mut values()));
+        assert_eq!(v.graphics.backend, GraphicsBackend::Auto);
+    }
+
+    #[test]
+    fn the_backend_row_is_first_on_graphics_and_says_what_draws_now() {
+        let mut s = Settings {
+            page: Page::Graphics,
+            ..Settings::default()
+        };
+        let now = SettingsValues {
+            gpu: "Vulkan · Mali-G77 MC9".to_string(),
+            ..values()
+        };
+        s.set_values(now, values());
+        assert_eq!(Page::Graphics.opts().next(), Some(Opt::Backend));
+        let (help, _) = s.footer();
+        assert!(help.ends_with("Applies on restart. Now: Vulkan · Mali-G77 MC9."), "{help}");
     }
 
     #[test]

@@ -558,7 +558,10 @@ impl ApplicationHandler for App {
             .with_inner_size(winit::dpi::PhysicalSize::new(1024u32, 600u32));
 
         let window = Arc::new(event_loop.create_window(attrs).unwrap());
-        let device = block_on(RenderDevice::new(window.clone()));
+        let device = block_on(RenderDevice::new(
+            window.clone(),
+            nostalre_renderer::wgpu::Backends::all(),
+        ));
         let tex_cache = TextureCache::new(&device.device);
 
         let font_atlas = FontAtlas::from_embedded(14.0, 1.0);

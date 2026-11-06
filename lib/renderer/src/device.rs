@@ -29,29 +29,85 @@ pub struct RenderDevice {
     pub depth_view: wgpu::TextureView,
 }
 
+/// An instance over `backends`, a surface on `window` and the adapter that draws to it; none when no backend in the
+/// set has one (a GL-only pick on a desktop without GL, Vulkan on a Mac)
+async fn open(
+    window: &Arc<winit::window::Window>,
+    backends: wgpu::Backends,
+) -> Option<(wgpu::Instance, wgpu::Surface<'static>, wgpu::Adapter)> {
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends,
+        flags: wgpu::InstanceFlags::from_build_config().with_env(),
+        ..Default::default()
+    });
+    let surface = match instance.create_surface(window.clone()) {
+        Ok(surface) => surface,
+        Err(e) => {
+            tracing::warn!("no surface over {backends:?}: {e}");
+            return None;
+        }
+    };
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: Some(&surface),
+            force_fallback_adapter: false,
+        })
+        .await;
+    match adapter {
+        Ok(adapter) => Some((instance, surface, adapter)),
+        Err(e) => {
+            tracing::warn!("no adapter over {backends:?}: {e}");
+            None
+        }
+    }
+}
+
+/// The API's name as Settings shows it
+pub fn backend_label(backend: wgpu::Backend) -> &'static str {
+    match backend {
+        wgpu::Backend::Vulkan => "Vulkan",
+        wgpu::Backend::Gl if cfg!(target_os = "android") => "OpenGL ES",
+        wgpu::Backend::Gl => "OpenGL",
+        wgpu::Backend::Metal => "Metal",
+        wgpu::Backend::Dx12 => "DirectX 12",
+        wgpu::Backend::BrowserWebGpu => "WebGPU",
+        wgpu::Backend::Noop => "none",
+    }
+}
+
 impl RenderDevice {
-    pub async fn new(window: Arc<winit::window::Window>) -> Self {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all().with_env(),
-            flags: wgpu::InstanceFlags::from_build_config().with_env(),
-            ..Default::default()
-        });
-
-        let surface = instance.create_surface(window.clone()).unwrap();
-
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            })
-            .await
-            .unwrap();
+    /// Draws through `backends` (WGPU_BACKEND overrides it), or any backend when none of those can start.
+    pub async fn new(window: Arc<winit::window::Window>, backends: wgpu::Backends) -> Self {
+        let wanted = backends.with_env();
+        let (instance, surface, adapter) = match open(&window, wanted).await {
+            Some(opened) => opened,
+            None if wanted != wgpu::Backends::all() => {
+                tracing::warn!("{wanted:?} cannot start: drawing with any backend");
+                open(&window, wgpu::Backends::all())
+                    .await
+                    .expect("a graphics adapter")
+            }
+            None => panic!("no graphics adapter"),
+        };
 
         let info = adapter.get_info();
-        tracing::info!("GPU: {} ({:?})", info.name, info.backend);
+        tracing::info!(
+            "GPU: {} ({:?}), driver {} {}",
+            info.name,
+            info.backend,
+            info.driver,
+            info.driver_info
+        );
 
-        let required_limits = wgpu::Limits::default().using_resolution(adapter.limits());
+        // GLES drivers may fall short of the default limits somewhere the game never goes: ask for what the
+        // adapter has there rather than fail
+        let required_limits = if wgpu::Limits::default().check_limits(&adapter.limits()) {
+            wgpu::Limits::default().using_resolution(adapter.limits())
+        } else {
+            tracing::warn!("adapter below the default limits: asking for its own");
+            adapter.limits()
+        };
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("nostalre-client"),
@@ -195,6 +251,12 @@ impl RenderDevice {
         self.surface = self.instance.create_surface(window.clone()).unwrap();
         let size = window.inner_size();
         self.resize(size.width.max(1), size.height.max(1));
+    }
+
+    /// The API and the GPU drawing, as Settings shows them: `Vulkan · Mali-G77 MC9`
+    pub fn gpu_label(&self) -> String {
+        let info = self.adapter.get_info();
+        format!("{} · {}", backend_label(info.backend), info.name)
     }
 
     /// Whether the swapchain image can be copied from (HD water's refraction).

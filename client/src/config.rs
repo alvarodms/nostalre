@@ -69,6 +69,9 @@ pub struct CustomConfig {
     /// HD graphics (bloom, grade, grass, shadows...). Off by default; `enabled` applies on the next start.
     #[serde(deserialize_with = "nostalre_game::hd::deserialize_lenient")]
     pub hd: nostalre_game::hd::HdConfig,
+    /// The graphics API (`auto`, `vulkan`, `gl`), read at start. A start that never reaches a map with it goes back
+    /// to `auto` (`client/src/gpu_backend.rs`).
+    pub backend: nostalre_game::display::GraphicsBackend,
 }
 
 impl Default for CustomConfig {
@@ -84,6 +87,7 @@ impl Default for CustomConfig {
             window: CustomWindowConfig::default(),
             skill: CustomSkillConfig::default(),
             hd: Default::default(),
+            backend: Default::default(),
         }
     }
 }
@@ -606,6 +610,7 @@ impl Config {
             filter_sprites: self.custom.filtering.sprites,
             sprite_upscale: self.custom.filtering.sprite_upscale,
             hd: self.custom.hd.clone(),
+            backend: self.custom.backend,
         }
     }
 

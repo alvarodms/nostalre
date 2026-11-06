@@ -52,6 +52,31 @@ pub struct GraphicsSettings {
     pub filter_sprites: bool,
     pub sprite_upscale: bool,
     pub hd: crate::hd::HdConfig,
+    /// Read at start only: a change applies on the next
+    pub backend: GraphicsBackend,
+}
+
+/// The graphics API the game draws with. Auto lets the driver list decide (Vulkan where there is one); the others
+/// are for a driver that draws wrong through the default, and fall back to Auto where they cannot start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GraphicsBackend {
+    #[default]
+    Auto,
+    Vulkan,
+    Gl,
+}
+
+impl GraphicsBackend {
+    pub const ALL: [Self; 3] = [Self::Auto, Self::Vulkan, Self::Gl];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "Auto",
+            Self::Vulkan => "Vulkan",
+            Self::Gl => "OpenGL ES",
+        }
+    }
 }
 
 /// The sound options changed together: the classic Sound window, the menu's Settings

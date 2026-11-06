@@ -1344,7 +1344,13 @@ impl ApplicationHandler for App {
             .with_title("Viewer")
             .with_inner_size(winit::dpi::PhysicalSize::new(1280u32, 800u32));
         let window = Arc::new(event_loop.create_window(attrs).unwrap());
-        let renderer = block_on(Renderer::new(window.clone(), 14.0, 1.0, Default::default()));
+        let renderer = block_on(Renderer::new(
+            window.clone(),
+            14.0,
+            1.0,
+            Default::default(),
+            nostalre_renderer::wgpu::Backends::all(),
+        ));
         self.renderer = Some(renderer);
         self.window = Some(window);
         self.last_frame = Instant::now();
