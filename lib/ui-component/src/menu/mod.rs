@@ -7,6 +7,7 @@ mod frame;
 mod home;
 mod item_detail;
 mod items;
+mod quests;
 mod settings;
 mod skills;
 mod status;
@@ -144,6 +145,7 @@ impl Command {
             Self::Equipment => Screen::Equipment,
             Self::Skills => Screen::Skills,
             Self::Status => Screen::Status,
+            Self::Quests => Screen::Quests,
             Self::Settings => Screen::Settings,
             _ => return None,
         })
@@ -180,6 +182,7 @@ enum Screen {
     Equipment,
     Skills,
     Status,
+    Quests,
     Settings,
 }
 
@@ -199,6 +202,7 @@ pub struct Menu {
     equipment: equipment::Equipment,
     skills: skills::Skills,
     status: status::Status,
+    quests: quests::Quests,
     settings: settings::Settings,
     textures: frame::Textures,
     /// A skill or item on its way onto the skill bar
@@ -458,6 +462,7 @@ impl InGameWindow for Menu {
                 Screen::Equipment => self.equipment.footer(ctx),
                 Screen::Skills => self.skills.footer(ctx),
                 Screen::Status => self.status.footer(),
+                Screen::Quests => self.quests.footer(ctx),
                 Screen::Settings => self.settings.footer(),
             }
         };
@@ -526,6 +531,11 @@ impl InGameWindow for Menu {
                     .build(ui, ctx, area, &keys, textures, out, &mut events)
             }
             Screen::Status => self.status.build(ui, ctx, area, &keys, &mut events),
+            Screen::Quests => {
+                let textures = &mut self.textures;
+                self.quests
+                    .build(ui, ctx, area, &keys, textures, &mut events)
+            }
             Screen::Settings => self.settings.build(ui, area, &keys, &mut events),
         }
         if let Some(what) = to_bar {
@@ -575,6 +585,7 @@ impl Menu {
             ),
             Screen::Skills => self.skills.summary(c.skill_point),
             Screen::Status => format!("Status points {}", c.status_point),
+            Screen::Quests => quests::summary(ctx.quest_log),
         };
         (crumb, info)
     }
@@ -642,7 +653,9 @@ mod tests {
         assert_eq!(menu.screen, Screen::Status);
         assert!(menu.toggle_for(HotkeyAction::ToggleStatus));
         assert!(!menu.is_open());
-        assert!(!menu.toggle_for(HotkeyAction::ToggleQuest));
+        assert!(menu.toggle_for(HotkeyAction::ToggleQuest));
+        assert_eq!(menu.screen, Screen::Quests);
+        assert!(!menu.toggle_for(HotkeyAction::ToggleParty));
     }
 
     #[test]
@@ -738,10 +751,57 @@ mod tests {
     }
 
     #[test]
+    fn enter_on_a_quest_tracks_or_untracks_it() {
+        use nostalre_game::quest::{Quest, QuestLog};
+        let mut log = QuestLog::default();
+        let quest = |id, active| Quest {
+            id,
+            active,
+            end_time: None,
+            objectives: Vec::new(),
+        };
+        log.replace(vec![quest(7, true), quest(8, false)]);
+        let mut menu = Menu::default();
+        menu.toggle_for(HotkeyAction::ToggleQuest);
+        let mut frame = |set: &dyn Fn(&mut UiContext)| {
+            let mut character = Character::new();
+            let data = DataTable::new();
+            let mut ctx = BuildCtx::test(&mut character, &data);
+            ctx.quest_log = &log;
+            let mut state = StateCache::new();
+            let mut ui_ctx = UiContext::new(1280.0, 720.0);
+            set(&mut ui_ctx);
+            let mut ui = test_frame(&mut ui_ctx, &mut state);
+            menu.build(&mut ui, &mut ctx)
+        };
+        let events = frame(&|ui| ui.key_enter = true);
+        assert!(matches!(
+            events.as_slice(),
+            [GameEvent::RequestToggleQuestActive {
+                quest_id: 7,
+                active: false
+            }]
+        ));
+        // the next tab holds the untracked one
+        frame(&|ui| {
+            ui.pressed_codes
+                .push(nostalre_ui::context::PhysicalKeyCode::PageDown)
+        });
+        let events = frame(&|ui| ui.key_enter = true);
+        assert!(matches!(
+            events.as_slice(),
+            [GameEvent::RequestToggleQuestActive {
+                quest_id: 8,
+                active: true
+            }]
+        ));
+    }
+
+    #[test]
     fn enter_on_a_window_command_opens_that_window_and_closes_the_menu() {
         let mut menu = Menu::default();
         menu.open();
-        menu.cursor = COMMANDS.iter().position(|&c| c == Command::Quests).unwrap();
+        menu.cursor = COMMANDS.iter().position(|&c| c == Command::Party).unwrap();
         let events = frame_with(&mut menu, |ui| ui.key_enter = true);
         // opened, never closed: the client leaves an open window as it is
         let [GameEvent::OpenWindow(window)] = events.as_slice() else {
@@ -750,7 +810,7 @@ mod tests {
         assert!(matches!(
             **window,
             GameEvent::RunHotkeyAction {
-                action: HotkeyAction::ToggleQuest
+                action: HotkeyAction::ToggleParty
             }
         ));
         assert!(!menu.is_open());

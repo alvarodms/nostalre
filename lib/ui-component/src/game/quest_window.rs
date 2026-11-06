@@ -112,7 +112,8 @@ fn textured(ui: &mut UiFrame, x: f32, y: f32, w: f32, h: f32, path: impl Into<Te
     });
 }
 
-fn quest_title(data: &DataTable, id: u32) -> String {
+/// A quest's name, its id when the display table has none
+pub(crate) fn quest_title(data: &DataTable, id: u32) -> String {
     data.quest_display
         .as_ref()
         .map(|t| t.title(id))
@@ -619,6 +620,11 @@ impl InGameWindow for QuestDetailWindow {
 }
 
 fn format_end_time(end: u32) -> String {
+    format!("~ {}", end_date(end))
+}
+
+/// A quest's Unix expiry as "YYYY/MM/DD HH:MM"
+pub(crate) fn end_date(end: u32) -> String {
     let secs = end as i64;
     let days = secs.div_euclid(86_400);
     let rem = secs.rem_euclid(86_400);
@@ -636,7 +642,7 @@ fn format_end_time(end: u32) -> String {
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = if month <= 2 { year + 1 } else { year };
 
-    format!("~ {year:04}/{month:02}/{day:02} {hour:02}:{minute:02}")
+    format!("{year:04}/{month:02}/{day:02} {hour:02}:{minute:02}")
 }
 
 #[cfg(test)]
