@@ -49,7 +49,7 @@ const SETTINGS_KEY_BASE_ID: u32 = 6550;
 /// The skill tree's nodes, 6700 to 6949
 const NODE_BASE_ID: u32 = 6700;
 const NODE_IDS: u32 = 250;
-/// The skill-bar picker's slots, 6950 to 6999
+/// The skill-bar picker's slots (6950 to 6985) and level arrows (6990, 6991), 6950 to 6999
 const SLOT_BASE_ID: u32 = 6950;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -555,7 +555,7 @@ impl InGameWindow for Menu {
             Screen::Settings => self.settings.build(ui, area, &keys, &mut events),
         }
         if let Some(what) = to_bar {
-            self.picker = Some(BarPicker::new(what));
+            self.picker = Some(BarPicker::new(what, ctx));
         }
         let party_asks = self.screen == Screen::Party && self.party.asking();
         if self.picker.is_some() || self.items.asking() || party_asks {

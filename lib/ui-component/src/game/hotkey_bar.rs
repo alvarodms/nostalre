@@ -219,11 +219,23 @@ pub(crate) fn assign_skill(
     slot: usize,
     skill: SkillEnum,
 ) -> Option<GameEvent> {
+    let level = character.skills.get_skill(skill)?.use_level();
+    assign_skill_at(character, use_levels, slot, skill, level)
+}
+
+/// [`assign_skill`] at `level` (kept within what is learnt), where the skill lets a level be picked
+pub(crate) fn assign_skill_at(
+    character: &mut Character,
+    use_levels: Option<&SkillUseLevelTable>,
+    slot: usize,
+    skill: SkillEnum,
+    level: i16,
+) -> Option<GameEvent> {
     let learned = character
         .skills
         .get_skill(skill)
         .filter(|s| skill_fits(s))?;
-    let level = saved_level(use_levels, skill, learned.use_level());
+    let level = saved_level(use_levels, skill, level.clamp(1, learned.level));
     character
         .hotkeys
         .set_slot(slot, HotkeySlotContent::Skill { skill, level });
