@@ -753,7 +753,11 @@ impl App {
             new_cart = cart_design_from_option(effect_state);
             old_falcon = has_falcon(entity.effect_state);
             new_falcon = has_falcon(effect_state);
-            entity.cart_type = new_cart;
+            // Only the option bits' own cart moves `cart_type`: a cart pushed via `SC_PUSH_CART` leaves them
+            // clear, so an unrelated option change (Orcish, Hide…) must not wipe it
+            if old_cart != new_cart {
+                entity.cart_type = new_cart;
+            }
             tracing::debug!(
                 "  old_effect=0x{:08x} new_effect=0x{effect_state:08x} job={}",
                 entity.effect_state,
