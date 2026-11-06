@@ -509,13 +509,33 @@ impl SpriteRenderer {
         );
     }
 
-    /// [`Self::render`] for a second set of batches in the same frame (the effects drawn before the sprites), from a
-    /// mesh batcher of their own: one upload would otherwise overwrite the other before the frame is submitted
-    pub fn render_second(
+    /// [`Self::render`] in the frame's scene pass, begun elsewhere with the depth attachment: `batches` uploaded,
+    /// then drawn. One pass for the whole scene: on Mali-G77 (driver r32p1) a pass of its own lost every sprite for a
+    /// frame or two at a time, the scene pass's store landing over it (wgpu puts no barrier between two passes on
+    /// one target).
+    pub fn draw_in(
         &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        target_view: &wgpu::TextureView,
-        depth_view: Option<&wgpu::TextureView>,
+        pass: &mut wgpu::RenderPass<'_>,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        batches: &[SpriteBatch],
+    ) {
+        draw_in_pass(
+            &self.pipelines,
+            &self.uniform_bind_group,
+            &mut self.meshes,
+            pass,
+            device,
+            queue,
+            batches,
+        );
+    }
+
+    /// [`Self::draw_in`] for a second set of batches in the same frame (the effects drawn before the sprites), from a
+    /// mesh batcher of their own: one upload would otherwise overwrite the other before the frame is submitted
+    pub fn draw_second_in(
+        &mut self,
+        pass: &mut wgpu::RenderPass<'_>,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         batches: &[SpriteBatch],
@@ -528,17 +548,11 @@ impl SpriteRenderer {
                 INITIAL_INDEX_CAPACITY,
             )
         });
-        let target = PassTarget {
-            encoder,
-            view: target_view,
-            depth_view,
-            clear_color: None,
-        };
-        draw_batches(
+        draw_in_pass(
             &self.pipelines,
             &self.uniform_bind_group,
             meshes,
-            target,
+            pass,
             device,
             queue,
             batches,
@@ -546,16 +560,15 @@ impl SpriteRenderer {
     }
 
     /// Stamp a depth-only body silhouette (colour masked off) so effects drawn
-    /// afterward occlude against the body. Call this *after* the colour `render`,
+    /// afterward occlude against the body. Call this *after* the colour draw,
     /// with batches whose `z` is the flat feet/anchor depth (no gradient): that
     /// far, uniform depth lets effects above the feet (buffs, casts, auras) pass
     /// the later depth test and draw on top, while ground effects at the feet are
     /// occluded — the ordering the game had before per-pixel gradient depth.
-    pub fn render_silhouette(
+    /// Drawn in the scene pass, as [`Self::draw_in`].
+    pub fn draw_silhouette_in(
         &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        target_view: &wgpu::TextureView,
-        depth_view: &wgpu::TextureView,
+        pass: &mut wgpu::RenderPass<'_>,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         batches: &[SpriteBatch],
@@ -565,32 +578,9 @@ impl SpriteRenderer {
             return;
         }
         self.silhouette_meshes.upload(device, queue);
-
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("sprite_silhouette"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target_view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: depth_view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            ..Default::default()
-        });
-
         pass.set_pipeline(&self.pipelines.depth_only);
         pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-        self.silhouette_meshes.bind(&mut pass);
+        self.silhouette_meshes.bind(pass);
         for run in self.silhouette_meshes.runs() {
             pass.set_bind_group(1, batches[run.first].texture, &[]);
             pass.draw_indexed(run.indices.clone(), 0, 0..1);
@@ -2226,37 +2216,74 @@ fn draw_batches(
             });
 
         let has_depth = target.depth_view.is_some();
-        pass.set_bind_group(0, uniform_bind_group, &[]);
-        meshes.bind(&mut pass);
-
-        let pipeline_for = |(additive, no_depth, weapon_aura): (bool, bool, bool)| match (
-            weapon_aura,
-            additive,
+        draw_runs(
+            &mut pass,
+            pipelines,
+            uniform_bind_group,
+            meshes,
+            batches,
             has_depth,
-            no_depth,
-        ) {
-            (true, _, true, _) => &pipelines.weapon_aura,
-            (true, _, false, _) => &pipelines.weapon_aura_no_depth,
-            (false, false, true, false) => &pipelines.normal,
-            (false, false, true, true) => &pipelines.overlay,
-            (false, false, false, _) => &pipelines.no_depth,
-            (false, true, true, false) => &pipelines.additive,
-            (false, true, true, true) => &pipelines.additive_overlay,
-            (false, true, false, _) => &pipelines.additive_no_depth,
-        };
-        let mut current = (false, false, false);
-        pass.set_pipeline(pipeline_for(current));
+        );
+    }
+}
 
-        for run in meshes.runs() {
-            let batch = &batches[run.first];
-            let wanted = (batch.additive, batch.no_depth, batch.weapon_aura);
-            if wanted != current {
-                current = wanted;
-                pass.set_pipeline(pipeline_for(current));
-            }
-            pass.set_bind_group(1, batch.texture, &[]);
-            pass.draw_indexed(run.indices.clone(), 0, 0..1);
+/// `batches` packed into `meshes`, uploaded and drawn in `pass` (begun elsewhere, with the depth attachment)
+fn draw_in_pass(
+    pipelines: &SpritePipelines,
+    uniform_bind_group: &wgpu::BindGroup,
+    meshes: &mut MeshBatcher<SpriteVertex>,
+    pass: &mut wgpu::RenderPass<'_>,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    batches: &[SpriteBatch],
+) {
+    pack(meshes, batches);
+    if meshes.is_empty() {
+        return;
+    }
+    meshes.upload(device, queue);
+    draw_runs(pass, pipelines, uniform_bind_group, meshes, batches, true);
+}
+
+/// `meshes`' runs (packed from `batches` and uploaded) drawn in `pass`, under the pipeline each batch asks for
+fn draw_runs(
+    pass: &mut wgpu::RenderPass<'_>,
+    pipelines: &SpritePipelines,
+    uniform_bind_group: &wgpu::BindGroup,
+    meshes: &MeshBatcher<SpriteVertex>,
+    batches: &[SpriteBatch],
+    has_depth: bool,
+) {
+    pass.set_bind_group(0, uniform_bind_group, &[]);
+    meshes.bind(pass);
+
+    let pipeline_for = |(additive, no_depth, weapon_aura): (bool, bool, bool)| match (
+        weapon_aura,
+        additive,
+        has_depth,
+        no_depth,
+    ) {
+        (true, _, true, _) => &pipelines.weapon_aura,
+        (true, _, false, _) => &pipelines.weapon_aura_no_depth,
+        (false, false, true, false) => &pipelines.normal,
+        (false, false, true, true) => &pipelines.overlay,
+        (false, false, false, _) => &pipelines.no_depth,
+        (false, true, true, false) => &pipelines.additive,
+        (false, true, true, true) => &pipelines.additive_overlay,
+        (false, true, false, _) => &pipelines.additive_no_depth,
+    };
+    let mut current = (false, false, false);
+    pass.set_pipeline(pipeline_for(current));
+
+    for run in meshes.runs() {
+        let batch = &batches[run.first];
+        let wanted = (batch.additive, batch.no_depth, batch.weapon_aura);
+        if wanted != current {
+            current = wanted;
+            pass.set_pipeline(pipeline_for(current));
         }
+        pass.set_bind_group(1, batch.texture, &[]);
+        pass.draw_indexed(run.indices.clone(), 0, 0..1);
     }
 }
 
@@ -2379,7 +2406,32 @@ mod tests {
             None,
             &batches,
         );
-        renderer.render_silhouette(&mut encoder, &color, &depth, &device, &queue, &batches);
+        // the scene pass's draws: begun elsewhere, sprites, a second set and the silhouette in one pass
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &color,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                ..Default::default()
+            });
+            renderer.draw_in(&mut pass, &device, &queue, &batches);
+            renderer.draw_second_in(&mut pass, &device, &queue, &batches[..7]);
+            renderer.draw_silhouette_in(&mut pass, &device, &queue, &batches);
+        }
         renderer.render(
             &mut encoder,
             &color,

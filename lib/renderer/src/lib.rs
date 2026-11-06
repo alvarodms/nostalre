@@ -292,6 +292,73 @@ fn fog_world_distance(fraction: f32, scale: f32) -> f32 {
     (FOG_TABLE_NEAR_PLANE + fraction * (FOG_TABLE_FAR_PLANE - FOG_TABLE_NEAR_PLANE)) * scale
 }
 
+/// The scene's render pass on `view` and `depth`: both cleared when `clear` gives the colour (depth to the far
+/// plane), else loaded
+fn scene_pass<'e>(
+    encoder: &'e mut wgpu::CommandEncoder,
+    view: &wgpu::TextureView,
+    depth: &wgpu::TextureView,
+    clear: Option<wgpu::Color>,
+) -> wgpu::RenderPass<'e> {
+    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("scene"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: clear.map_or(wgpu::LoadOp::Load, wgpu::LoadOp::Clear),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: depth,
+            depth_ops: Some(wgpu::Operations {
+                load: if clear.is_some() {
+                    wgpu::LoadOp::Clear(1.0)
+                } else {
+                    wgpu::LoadOp::Load
+                },
+                store: wgpu::StoreOp::Store,
+            }),
+            stencil_ops: None,
+        }),
+        ..Default::default()
+    })
+}
+
+/// What goes over the water, in `pass`: the effect sprites, then the effects (with the sprite particles)
+#[allow(clippy::too_many_arguments)]
+fn draw_over_water(
+    pass: &mut wgpu::RenderPass<'_>,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    effect_sprite_renderer: &mut SpriteRenderer,
+    effect_sprite_batches: &[SpriteBatch],
+    effect_dispatcher: &mut EffectDispatcher,
+    records: &[DrawRecord],
+    camera_bind_group: &wgpu::BindGroup,
+    primitives: &effect::EffectPrimitiveRegistry,
+) {
+    if !effect_sprite_batches.is_empty() {
+        nostalre_profiling::profile_scope!("effect-sprite");
+        effect_sprite_renderer.draw_in(pass, device, queue, effect_sprite_batches);
+    }
+    if !records.is_empty() {
+        nostalre_profiling::profile_scope!("effect-dispatch");
+        effect_dispatcher.draw_in(
+            records,
+            pass,
+            device,
+            queue,
+            camera_bind_group,
+            &effect_sprite_renderer.uniform_bind_group,
+            effect_sprite_renderer,
+            primitives,
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_effect_records<'tex>(
     effect_draws: &effect::EffectDrawList,
@@ -1507,29 +1574,51 @@ impl Renderer {
             }
         }
 
+        // The effects' draw records, built before the scene pass begins.
+        let behind_list = (!effect_draws.behind.is_empty()).then(|| effect_draws.behind_as_list());
+        let mut behind_records = self.effect_behind_dispatcher.record_list();
+        if let Some(behind_list) = &behind_list {
+            nostalre_profiling::profile_scope!("effect-behind-build");
+            build_effect_records(
+                behind_list,
+                &self.camera,
+                &self.texture_cache,
+                &self.white_bind_group,
+                logical_w,
+                logical_h,
+                &self.effect_primitives,
+                &mut behind_records,
+            );
+        }
+        let mut records = self.effect_dispatcher.record_list();
         {
-            nostalre_profiling::profile_scope!("scene-opaque");
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("main"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(clear_color),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
-            });
+            nostalre_profiling::profile_scope!("effect-build");
+            build_effect_records(
+                effect_draws,
+                &self.camera,
+                &self.texture_cache,
+                &self.white_bind_group,
+                logical_w,
+                logical_h,
+                &self.effect_primitives,
+                &mut records,
+            );
+        }
+        records.extend(sprite_particle_records);
+
+        // The whole scene in one render pass, in this order: the ground and models, the effects behind and under the
+        // units, the units, their silhouette, the water, then the effects over them. A pass each put the scene's
+        // store and the next pass's load on the same target with no barrier between them (wgpu counts two colour
+        // passes as ordered); Mali-G77's driver r32p1 let them overlap, and every unit vanished for a frame or two.
+        // HD water alone splits it: it copies the finished opaque scene, so a second pass draws what goes over it.
+        let hd_water_scene = scene_texture.filter(|_| {
+            hd_water
+                && self.background_mode == BackgroundMode::RswMap
+                && self.water_renderer.is_some()
+        });
+        {
+            nostalre_profiling::profile_scope!("scene");
+            let mut pass = scene_pass(&mut encoder, view, depth_view, Some(clear_color));
 
             match self.background_mode {
                 BackgroundMode::RswMap => {
@@ -1545,7 +1634,7 @@ impl Renderer {
                         nostalre_profiling::profile_scope!("animated-models");
                         animated.render(&mut pass, &self.global_uniforms, &self.texture_cache);
                     }
-                    if let Some(grass) = self.grass.as_ref().filter(|_| self.hd_effects()) {
+                    if let Some(grass) = self.grass.as_ref().filter(|_| hd_effects) {
                         nostalre_profiling::profile_scope!("grass");
                         grass.render(&mut pass, &self.global_uniforms);
                     }
@@ -1572,28 +1661,12 @@ impl Renderer {
                 }
                 BackgroundMode::Clear => {}
             }
-        }
 
-        if !effect_draws.behind.is_empty() {
-            nostalre_profiling::profile_scope!("effect-behind");
-            let behind_list = effect_draws.behind_as_list();
-            let mut behind_records = self.effect_behind_dispatcher.record_list();
-            build_effect_records(
-                &behind_list,
-                &self.camera,
-                &self.texture_cache,
-                &self.white_bind_group,
-                logical_w,
-                logical_h,
-                &self.effect_primitives,
-                &mut behind_records,
-            );
             if !behind_records.is_empty() {
-                self.effect_behind_dispatcher.dispatch(
+                nostalre_profiling::profile_scope!("effect-behind");
+                self.effect_behind_dispatcher.draw_in(
                     &behind_records,
-                    &mut encoder,
-                    &view,
-                    depth_view,
+                    &mut pass,
                     &self.device.device,
                     &self.device.queue,
                     &self.global_uniforms.bind_group,
@@ -1602,60 +1675,76 @@ impl Renderer {
                     &self.effect_primitives,
                 );
             }
+
+            if !effect_under_sprite_batches.is_empty() {
+                nostalre_profiling::profile_scope!("effect-under-sprite");
+                self.effect_sprite_renderer.draw_second_in(
+                    &mut pass,
+                    &self.device.device,
+                    &self.device.queue,
+                    effect_under_sprite_batches,
+                );
+            }
+
+            if !sprite_batches.is_empty() {
+                nostalre_profiling::profile_scope!("sprite");
+                self.sprite_renderer.draw_in(
+                    &mut pass,
+                    &self.device.device,
+                    &self.device.queue,
+                    sprite_batches,
+                );
+            }
+
+            // Stamp the flat-depth body silhouette after the colour draws so the
+            // effects below occlude against the body (effects above the feet
+            // draw on top; ground effects at the feet are hidden).
+            if !silhouette_batches.is_empty() {
+                nostalre_profiling::profile_scope!("silhouette");
+                self.sprite_renderer.draw_silhouette_in(
+                    &mut pass,
+                    &self.device.device,
+                    &self.device.queue,
+                    silhouette_batches,
+                );
+            }
+
+            if hd_water_scene.is_none() {
+                // Water draws after the silhouette, never after the colour draws: those
+                // write no depth, so there the body's pixels still hold the depth of the
+                // ground behind it and the surface would swallow the whole sprite. Against
+                // the silhouette's flat feet depth the surface cuts the body at the
+                // waterline instead, so a character wading in deep water is submerged
+                // further than one in the shallows.
+                if let (BackgroundMode::RswMap, Some(water)) =
+                    (self.background_mode, &self.water_renderer)
+                {
+                    nostalre_profiling::profile_scope!("water");
+                    water.render(
+                        &mut pass,
+                        &self.global_uniforms,
+                        &self.texture_cache,
+                        elapsed,
+                    );
+                }
+                draw_over_water(
+                    &mut pass,
+                    &self.device.device,
+                    &self.device.queue,
+                    &mut self.effect_sprite_renderer,
+                    effect_sprite_batches,
+                    &mut self.effect_dispatcher,
+                    &records,
+                    &self.global_uniforms.bind_group,
+                    &self.effect_primitives,
+                );
+            }
         }
 
-        if !effect_under_sprite_batches.is_empty() {
-            nostalre_profiling::profile_scope!("effect-under-sprite");
-            self.effect_sprite_renderer.render_second(
-                &mut encoder,
-                view,
-                Some(depth_view),
-                &self.device.device,
-                &self.device.queue,
-                effect_under_sprite_batches,
-            );
-        }
-
-        if !sprite_batches.is_empty() {
-            nostalre_profiling::profile_scope!("sprite");
-            self.sprite_renderer.render(
-                &mut encoder,
-                &view,
-                Some(depth_view),
-                &self.device.device,
-                &self.device.queue,
-                None,
-                sprite_batches,
-            );
-        }
-
-        // Stamp the flat-depth body silhouette after the colour pass so the
-        // effect passes below occlude against the body (effects above the feet
-        // draw on top; ground effects at the feet are hidden).
-        if !silhouette_batches.is_empty() {
-            nostalre_profiling::profile_scope!("silhouette");
-            self.sprite_renderer.render_silhouette(
-                &mut encoder,
-                &view,
-                depth_view,
-                &self.device.device,
-                &self.device.queue,
-                silhouette_batches,
-            );
-        }
-
-        // Water draws after the silhouette, never after the colour pass: the colour
-        // pass writes no depth, so at that point the body's pixels still hold the
-        // depth of the ground behind it and the surface would swallow the whole
-        // sprite. Against the silhouette's flat feet depth the surface cuts the body
-        // at the waterline instead, so a character wading in deep water is submerged
-        // further than one in the shallows.
-        if let (BackgroundMode::RswMap, Some(water)) =
-            (self.background_mode, &mut self.water_renderer)
-        {
-            nostalre_profiling::profile_scope!("water");
-            match scene_texture.filter(|_| hd_water) {
-                Some(scene_texture) => water.render_hd(
+        if let (Some(scene_texture), Some(water)) = (hd_water_scene, &mut self.water_renderer) {
+            {
+                nostalre_profiling::profile_scope!("water");
+                water.render_hd(
                     &self.device.device,
                     &mut encoder,
                     water::HdWaterTarget {
@@ -1666,79 +1755,18 @@ impl Renderer {
                     &self.global_uniforms,
                     &self.texture_cache,
                     elapsed,
-                ),
-                None => {
-                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("water"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &view,
-                            depth_slice: None,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Load,
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                            view: depth_view,
-                            depth_ops: Some(wgpu::Operations {
-                                load: wgpu::LoadOp::Load,
-                                store: wgpu::StoreOp::Store,
-                            }),
-                            stencil_ops: None,
-                        }),
-                        ..Default::default()
-                    });
-                    water.render(
-                        &mut pass,
-                        &self.global_uniforms,
-                        &self.texture_cache,
-                        elapsed,
-                    );
-                }
+                );
             }
-        }
-
-        if !effect_sprite_batches.is_empty() {
-            nostalre_profiling::profile_scope!("effect-sprite");
-            self.effect_sprite_renderer.render(
-                &mut encoder,
-                &view,
-                Some(depth_view),
+            let mut pass = scene_pass(&mut encoder, view, depth_view, None);
+            draw_over_water(
+                &mut pass,
                 &self.device.device,
                 &self.device.queue,
-                None,
+                &mut self.effect_sprite_renderer,
                 effect_sprite_batches,
-            );
-        }
-
-        let mut records = self.effect_dispatcher.record_list();
-        {
-            nostalre_profiling::profile_scope!("effect-build");
-            build_effect_records(
-                effect_draws,
-                &self.camera,
-                &self.texture_cache,
-                &self.white_bind_group,
-                logical_w,
-                logical_h,
-                &self.effect_primitives,
-                &mut records,
-            );
-        }
-        records.extend(sprite_particle_records);
-        if !records.is_empty() {
-            nostalre_profiling::profile_scope!("effect-dispatch");
-            self.effect_dispatcher.dispatch(
+                &mut self.effect_dispatcher,
                 &records,
-                &mut encoder,
-                &view,
-                depth_view,
-                &self.device.device,
-                &self.device.queue,
                 &self.global_uniforms.bind_group,
-                &self.effect_sprite_renderer.uniform_bind_group,
-                &self.effect_sprite_renderer,
                 &self.effect_primitives,
             );
         }
