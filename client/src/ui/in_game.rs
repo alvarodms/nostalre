@@ -16,7 +16,9 @@ use nostalre_game::quest::QuestMarker;
 use nostalre_ui::frame::{UiFrame, WidgetId};
 use nostalre_ui_component::game::basic_info_window::BASIC_INFO_WINDOW_ID;
 use nostalre_ui_component::game::drop_quantity_dialog::DropQuantityDialog;
-use nostalre_ui_component::game::hotkey_bar::{DOCK_W, HOTKEY_BAR_WINDOW_ID};
+use nostalre_ui_component::game::hotkey_bar::{
+    DOCK_W, HOTKEY_BAR_WINDOW_ID, PAD_ROW_H, dock_height,
+};
 use nostalre_ui_component::game::inventory_window::INV_WINDOW_ID;
 use nostalre_ui_component::game::levelup_notification_window::LevelUpClick;
 use nostalre_ui_component::game::minimap_window::{MarkerType, MinimapMarker, quest_marker_color};
@@ -146,8 +148,13 @@ pub fn build_in_game_ui(
         }
     }
     let placement = (windows.hud.is_modern() && !menu_open).then(|| {
-        let rows = ctx.character.hotkeys.visible_rows() as usize;
-        windows.hud.build(ui, &ctx, rows)
+        // a controller used last: its one row in place of the skill rows
+        let dock_h = if windows.hotkey_bar.pad_row_shown(ui.ctx.pad_labels) {
+            PAD_ROW_H
+        } else {
+            dock_height(ctx.character.hotkeys.visible_rows() as usize)
+        };
+        windows.hud.build(ui, &ctx, dock_h)
     });
     windows.hotkey_bar.dock = placement.map(|p| p.hotkeys);
     windows.minimap_window.round = placement.map(|p| p.minimap);

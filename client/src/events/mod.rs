@@ -3167,6 +3167,10 @@ impl App {
                     self.config.pad_wheel = wheel;
                     self.save_config_soon();
                 }
+                GameEvent::PadHotbarChanged(hotbar) => {
+                    self.config.pad_hotbar = hotbar;
+                    self.save_config_soon();
+                }
                 GameEvent::ToggleHotkeyConfig => {
                     if !self.windows.hotkey_config_window.is_open() {
                         self.windows

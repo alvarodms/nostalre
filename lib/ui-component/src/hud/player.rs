@@ -3,7 +3,7 @@
 use super::HudInput;
 use super::style::{self, Fill, Trail};
 use crate::BuildCtx;
-use crate::game::hotkey_bar::{DOCK_W, HotkeyDock, dock_height};
+use crate::game::hotkey_bar::{DOCK_W, HotkeyDock};
 use crate::game::status_icon_bar::draw_status_icon;
 use crate::helper::format::format_thousands;
 use nostalre_game::character::is_fourth_job;
@@ -32,7 +32,7 @@ pub fn build(
     ui: &mut UiFrame,
     ctx: &BuildCtx,
     input: &HudInput,
-    rows: usize,
+    dock_h: f32,
     hp_trail: &mut Trail,
 ) -> HotkeyDock {
     let c = &*ctx.character;
@@ -118,9 +118,9 @@ pub fn build(
     }
     y -= LABEL_GAP + line + GAP;
 
-    y -= dock_height(rows);
+    y -= dock_h;
     let dock = HotkeyDock { x, y };
-    if rows > 0 {
+    if dock_h > 0.0 {
         y -= GAP;
     }
 

@@ -1,6 +1,6 @@
 //! A controller as the player set it up (`client/src/input/gamepad.rs`): which in-game button each physical
-//! button is, and the eight entries of the wheel that holding Select opens. The D-pad and the sticks are not
-//! remapped.
+//! button is, the eight entries of the wheel that holding Select opens, how the hotbar row shows. The D-pad and
+//! the sticks are not remapped.
 use crate::keybinding::HotkeyAction;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -251,6 +251,39 @@ impl PadWheel {
     }
 }
 
+/// How the controller's hotbar row shows while no shoulder is held: the diamond a shoulder lifts always shows
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum PadHotbar {
+    /// Always at full strength
+    #[default]
+    Always,
+    /// Dimmed a few seconds after the last shoulder, Select or hotbar press; back on the next, or when a
+    /// cooldown ends
+    Fade,
+    /// Hidden but for the set: only the diamond a shoulder lifts shows
+    OnHold,
+}
+
+impl PadHotbar {
+    pub const ALL: [Self; 3] = [Self::Always, Self::Fade, Self::OnHold];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Always => "Always",
+            Self::Fade => "Fade",
+            Self::OnHold => "On hold",
+        }
+    }
+
+    /// The next choice (`forward`) or the one before, wrapping round
+    pub fn step(self, forward: bool) -> Self {
+        let n = Self::ALL.len();
+        let at = Self::ALL.iter().position(|&m| m == self).unwrap_or(0);
+        let next = if forward { at + 1 } else { at + n - 1 };
+        Self::ALL[next % n]
+    }
+}
+
 /// The section a stick points at, clockwise from the top; `y` is down, as the sticks report it. `None` near the
 /// middle
 pub fn wheel_slot(x: f32, y: f32) -> Option<usize> {
@@ -313,6 +346,13 @@ mod tests {
         assert_eq!(wheel_slot(-1.0, 0.0), Some(6));
         assert_eq!(wheel_slot(-0.7, -0.7), Some(7));
         assert_eq!(wheel_slot(0.2, 0.1), None);
+    }
+
+    #[test]
+    fn the_hotbar_display_steps_round() {
+        assert_eq!(PadHotbar::Always.step(true), PadHotbar::Fade);
+        assert_eq!(PadHotbar::OnHold.step(true), PadHotbar::Always);
+        assert_eq!(PadHotbar::Always.step(false), PadHotbar::OnHold);
     }
 
     #[test]

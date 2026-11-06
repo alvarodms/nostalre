@@ -33,11 +33,12 @@ use nostalre_game::app_state::AppState;
 use nostalre_game::cursor::PendingSkillTarget;
 use nostalre_game::entity::{EntityState, EntityType};
 use nostalre_game::entity_collection::TALK_RANGE;
-use nostalre_game::hotkey::{PAD_SET_SLOTS, PAD_SETS};
+use nostalre_game::hotkey::{PAD_SETS, pad_slot};
 use nostalre_game::keybinding::HotkeyAction;
 use nostalre_game::pad::{PadButton, PadButtons, WHEEL_SLOTS, wheel_slot};
 use nostalre_game::targeting::{TargetClass, revives_corpse, skill_target_class};
 use nostalre_renderer::camera::CameraControl;
+use nostalre_ui_component::game::hotkey_bar::PadBarView;
 
 /// Stick values within this are rest (roBrowser joyDeadline).
 const DEADZONE: f32 = 0.1;
@@ -143,6 +144,17 @@ enum Group {
     L1R1,
 }
 
+impl Group {
+    /// Its place in a set, as the HUD's row shows the groups
+    fn index(self) -> usize {
+        match self {
+            Group::L1 => 0,
+            Group::L1R1 => 1,
+            Group::R1 => 2,
+        }
+    }
+}
+
 /// A set's twelve slots, in the order of the HUD: L1's four, L1+R1's, R1's, each Y, X, B, A
 fn hotbar_slot(group: Group, face: Button, set: u8) -> Option<usize> {
     let face = match face {
@@ -152,12 +164,7 @@ fn hotbar_slot(group: Group, face: Button, set: u8) -> Option<usize> {
         Button::A => 3,
         _ => return None,
     };
-    let group = match group {
-        Group::L1 => 0,
-        Group::L1R1 => 1,
-        Group::R1 => 2,
-    };
-    Some(PAD_SET_SLOTS * set as usize + 4 * group + face)
+    Some(pad_slot(set, group.index(), face))
 }
 
 /// Octant 0..8 of a direction, for "walk again when the direction turns".
@@ -506,6 +513,7 @@ impl App {
         self.gamepad_cursor(event_loop, window, dt);
         self.gamepad_walk(now);
         self.gamepad_camera(dt);
+        self.gamepad_bar();
         self.touch_actions();
 
         let select = self.gamepad.select_down();
@@ -596,6 +604,7 @@ impl App {
                 if let Some(slot) = group.and_then(|g| hotbar_slot(g, button, self.gamepad.set)) {
                     self.gamepad.aim_armed = true;
                     self.use_hotbar_slot(slot);
+                    self.windows.hotkey_bar.pad_pressed(slot);
                 }
             }
             // aiming: A casts at the aimed target, whatever the frozen cursor is over; with none the skill
@@ -743,6 +752,23 @@ impl App {
             // no Ctrl here: it would lift the zoom's limits
             camera.apply_wheel(zoom * ZOOM_NOTCHES_PER_SEC * dt, control);
         }
+    }
+
+    /// The HUD's controller row: the set, the shoulders held (the group they lift), Select
+    fn gamepad_bar(&mut self) {
+        let held = |b: Button| self.gamepad.held.contains(&b);
+        let group = match (held(Button::L1), held(Button::R1)) {
+            (true, true) => Some(Group::L1R1),
+            (true, false) => Some(Group::L1),
+            (false, true) => Some(Group::R1),
+            (false, false) => None,
+        };
+        self.windows.hotkey_bar.pad = Some(PadBarView {
+            set: self.gamepad.set,
+            group: group.map(Group::index),
+            select: held(Button::Select),
+            display: self.config.pad_hotbar,
+        });
     }
 
     /// The on-screen controls' taps: Attack as X, a slot button as its hotbar slot, the set button as
