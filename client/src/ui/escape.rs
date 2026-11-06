@@ -1,7 +1,7 @@
 //! The single Escape router. Escape has exactly one effect per press: it walks a
 //! fixed priority chain, front-most first, and stops at the first claimant.
 
-use crate::game_state::{CombatState, PendingCasts};
+use crate::game_state::{CombatState, GameState, PendingCasts};
 use crate::ui::windows::{Dispatch, REGISTRY, Windows};
 use nostalre_game::event::GameEvent;
 use nostalre_game::pet::PetRoulette;
@@ -258,6 +258,73 @@ pub fn route_escape(
         windows.system_menu.open = true;
     }
     events
+}
+
+/// Whether an Escape now would close or cancel something: the chain [`route_escape`] walks, short of its
+/// fallbacks (dropping the attack target, opening the menu). The pad's B asks first, so it backs out of a
+/// window like Escape and is still the right-click with nothing open. Keep in step with [`route_escape`].
+pub fn escape_would_close(windows: &mut Windows, game: &mut GameState) -> bool {
+    if windows.chat_window.is_active() {
+        return true;
+    }
+    let pending = &game.pending_casts;
+    if pending.pending_companion_patrol.is_some()
+        || pending.pending_skill_target.is_some()
+        || pending.marriage_targeting
+        || game.companions.capture_targeting
+        || game.companions.pet_roulette.is_some()
+    {
+        return true;
+    }
+    if windows.context_menu.is_open()
+        || windows.card_insert_dialog.is_some()
+        || windows.skill_talkbox_dialog.is_some()
+        || windows.guild_expel_dialog.is_some()
+        || windows.drop_quantity_dialog.is_some()
+        || windows
+            .confirm_dialog
+            .state
+            .as_ref()
+            .is_some_and(|s| !s.no_buttons)
+        || windows.item_list_selection_window.is_open()
+        || windows.warp_list_window.is_open()
+    {
+        return true;
+    }
+    let local_aid = game
+        .session
+        .login_session
+        .as_ref()
+        .map_or(0, |s| s.account_id);
+    let ctx = BuildCtx {
+        character: &mut game.character,
+        data: &game.data_table,
+        party: game.party.as_ref(),
+        friends: &game.friends,
+        guild: game.guild.as_ref(),
+        quest_log: &game.quest_log,
+        homunculus: game.companions.homunculus.as_ref(),
+        mercenary: game.companions.mercenary.as_ref(),
+        pet: &game.companions.pet,
+        companion_ai: &mut game.companions.companion_ai,
+        job_class: game.world.entities.player_job(),
+        local_aid,
+        local_gid: local_aid,
+    };
+    if windows.item_info_window.wants_escape(&ctx)
+        || windows.menu.wants_escape(&ctx)
+        || windows.system_menu.wants_escape(&ctx)
+        || windows.npc_shop.wants_escape(&ctx)
+        || windows.npc_dialog.wants_escape(&ctx)
+    {
+        return true;
+    }
+    REGISTRY.iter().any(|(id, dispatch)| match dispatch {
+        Dispatch::Trait(accessor) => {
+            !windows.escape.excluded.contains(id) && accessor(windows).wants_escape(&ctx)
+        }
+        Dispatch::VendingAvailable => false,
+    })
 }
 
 /// Whether a modal (or a window's nested input dialog) other than the frameless menu is waiting for an
@@ -529,5 +596,26 @@ mod tests {
 
         assert!(harness.pending_casts.pending_skill_target.is_none());
         assert!(windows.guild_window.is_open());
+    }
+
+    /// The pad's B asks before it acts: Escape only with something to close, the right-click otherwise
+    #[test]
+    fn escape_would_close_open_windows_not_the_fallback() {
+        let mut game = GameState::new();
+        let mut windows = Windows::new();
+        assert!(!escape_would_close(&mut windows, &mut game));
+
+        windows.world_map_window.open();
+        assert!(escape_would_close(&mut windows, &mut game));
+        windows.world_map_window.toggle();
+        assert!(!escape_would_close(&mut windows, &mut game));
+
+        // an excluded window stays open under Escape: B is the right-click over it
+        windows.escape.set_excluded(&["World Map".to_string()]);
+        windows.world_map_window.open();
+        assert!(!escape_would_close(&mut windows, &mut game));
+
+        game.companions.capture_targeting = true;
+        assert!(escape_would_close(&mut windows, &mut game));
     }
 }

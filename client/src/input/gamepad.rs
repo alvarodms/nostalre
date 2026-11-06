@@ -24,6 +24,7 @@ use winit::keyboard::{Key, KeyCode, NativeKey, PhysicalKey};
 use winit::window::WindowId;
 
 use crate::App;
+use crate::ui::escape::escape_would_close;
 use models::enums::skill_enums::SkillEnum;
 use nostalre_game::aim::{
     AimInput, AimTarget, aim_candidate, aim_dir, aim_target, buff_candidate, buff_target,
@@ -201,6 +202,8 @@ pub(crate) struct Gamepad {
     wheel: Option<Option<usize>>,
     /// The wheel's icons were loaded (the first time Select went down alone)
     wheel_icons: bool,
+    /// The wheel was open as this frame began: a button pressed with Select now backs out of it
+    wheel_was_open: bool,
     held: HashSet<Button>,
     /// Pressed since the last frame, in order.
     fresh: Vec<Button>,
@@ -498,6 +501,7 @@ impl App {
 
         self.gamepad_capture();
         self.gamepad_aim();
+        self.gamepad.wheel_was_open = self.gamepad.wheel.is_some();
         self.gamepad_wheel(now);
         self.gamepad_cursor(event_loop, window, dt);
         self.gamepad_walk(now);
@@ -551,6 +555,17 @@ impl App {
                     self.gamepad.set = (self.gamepad.set + PAD_SETS - 1) % PAD_SETS;
                 }
                 Button::R1 if playing => self.gamepad.set = (self.gamepad.set + 1) % PAD_SETS,
+                // B's right-click while B itself backs out of a window: item info over a window's item
+                Button::B if in_game && !self.gamepad.wheel_was_open => self.gamepad_click(
+                    event_loop,
+                    window,
+                    MouseButton::Right,
+                    ElementState::Pressed,
+                ),
+                // backing out of the wheel: its release is no click either
+                Button::B => {
+                    self.gamepad.menu_presses.insert(button);
+                }
                 _ => {}
             }
             return;
@@ -593,6 +608,12 @@ impl App {
             }
             Button::A => {
                 self.gamepad_click(event_loop, window, MouseButton::Left, ElementState::Pressed)
+            }
+            // B is Escape while Escape has something to close (a window, a dialog, a skill waiting for its
+            // target); the right-click otherwise. Select+B is the right-click always
+            Button::B if in_game && escape_would_close(&mut self.windows, &mut self.game) => {
+                self.gamepad.menu_presses.insert(button);
+                self.with_ui(|ui| ui.key_escape = true);
             }
             Button::B => self.gamepad_click(
                 event_loop,
