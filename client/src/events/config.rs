@@ -34,6 +34,7 @@ fn settings_values(config: &Config) -> SettingsValues {
         chat_lines: config.shortcut_commands.clone(),
         pad: config.pad_buttons,
         wheel: config.pad_wheel,
+        hotbar: config.pad_hotbar,
     }
 }
 

@@ -486,15 +486,16 @@ pub fn pill_width(ui: &UiFrame, content: &str) -> f32 {
 /// A skill or item slot: a dark, see-through button lit a little from above, a faint border that
 /// lights up on hover
 pub fn slot(ui: &mut UiFrame, r: Rect, hovered: bool) {
-    let border = if hovered {
-        SLOT_BORDER_HOVER
-    } else {
-        SLOT_BORDER
-    };
-    push_white(
-        ui,
-        draw::rounded_rect(r.x, r.y, r.w, r.h, SLOT_RADIUS, border),
-    );
+    slot_rounded(ui, r, SLOT_RADIUS, if hovered { 1.0 } else { 0.0 });
+}
+
+/// [`slot`] with its corners rounded by `radius`, up to a circle; `lit` (0 to 1) brightens the border
+pub fn slot_rounded(ui: &mut UiFrame, r: Rect, radius: f32, lit: f32) {
+    let radius = radius.min(r.w * 0.5).min(r.h * 0.5);
+    let lit = lit.clamp(0.0, 1.0);
+    let border =
+        std::array::from_fn(|i| SLOT_BORDER[i] + (SLOT_BORDER_HOVER[i] - SLOT_BORDER[i]) * lit);
+    push_white(ui, draw::rounded_rect(r.x, r.y, r.w, r.h, radius, border));
     push_white(
         ui,
         draw::rounded_rect_vgrad(
@@ -502,21 +503,42 @@ pub fn slot(ui: &mut UiFrame, r: Rect, hovered: bool) {
             r.y + 1.0,
             r.w - 2.0,
             r.h - 2.0,
-            SLOT_RADIUS - 1.0,
+            (radius - 1.0).max(0.0),
             SLOT_TOP,
             SLOT_BG,
         ),
     );
-    push_quad(
-        ui,
-        draw::quad_vertices(
-            r.x + SLOT_RADIUS,
-            r.y + 1.0,
-            r.w - 2.0 * SLOT_RADIUS,
-            1.0,
-            SLOT_GLOSS,
-        ),
-    );
+    let gloss = r.w - 2.0 * radius.max(SLOT_RADIUS);
+    if gloss > 0.0 {
+        push_quad(
+            ui,
+            draw::quad_vertices(
+                r.x + radius.max(SLOT_RADIUS),
+                r.y + 1.0,
+                gloss,
+                1.0,
+                SLOT_GLOSS,
+            ),
+        );
+    }
+}
+
+/// A short label in a pill: lit in the HUD's picked blue, or dark
+pub fn tag(ui: &mut UiFrame, centre: f32, top: f32, content: &str, lit: bool) {
+    let h = tag_height(ui);
+    let w = measure_bold(ui, content) + 2.0 * PILL_PAD;
+    let x = (centre - w * 0.5).floor();
+    let (fill, color) = if lit {
+        (PICKED, TEXT)
+    } else {
+        (shade(0.6), DIM)
+    };
+    push_white(ui, draw::rounded_rect(x, top, w, h, h * 0.5, fill));
+    text_bold(ui, x + PILL_PAD, baseline(ui, top - 1.0), content, color);
+}
+
+pub fn tag_height(ui: &UiFrame) -> f32 {
+    line(ui) - 2.0
 }
 
 /// The pale part of a bar that shows what was just lost: it holds a moment, then drains to the value

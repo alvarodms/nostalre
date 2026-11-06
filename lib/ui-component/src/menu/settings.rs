@@ -10,7 +10,7 @@ use nostalre_game::event::GameEvent;
 use nostalre_game::hd::HdPreset;
 use nostalre_game::keybinding::{HotkeyAction, KeyBindings, KeyChord};
 use nostalre_game::pad::{
-    PadButton, PadButtons, PadPreset, PadWheel, WHEEL_DIRECTIONS, WHEEL_SLOTS,
+    PadButton, PadButtons, PadHotbar, PadPreset, PadWheel, WHEEL_DIRECTIONS, WHEEL_SLOTS,
 };
 use nostalre_ui::frame::{UiFrame, WidgetId};
 use nostalre_ui::rect::Rect;
@@ -49,8 +49,10 @@ const PAD_BUTTONS: [PadButton; 12] = [
     PadButton::R3,
 ];
 const PAD_COLUMN: usize = PAD_BUTTONS.len() / 2;
-/// The Controller page's rows: the preset, the buttons, the wheel's entries
-const PAD_ROWS: usize = 1 + PAD_BUTTONS.len() + WHEEL_SLOTS;
+/// The Controller page's Layout rows, before the buttons: the preset, the hotbar row
+const PAD_LAYOUT_ROWS: usize = 2;
+/// The Controller page's rows: the layout's, the buttons, the wheel's entries
+const PAD_ROWS: usize = PAD_LAYOUT_ROWS + PAD_BUTTONS.len() + WHEEL_SLOTS;
 /// A button waited for this long is left as it was
 const PAD_CAPTURE_MS: u64 = 5000;
 
@@ -67,6 +69,8 @@ pub struct SettingsValues {
     pub pad: PadButtons,
     /// What holding Select's wheel opens
     pub wheel: PadWheel,
+    /// How the controller's hotbar row shows
+    pub hotbar: PadHotbar,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -559,6 +563,8 @@ fn pages() -> &'static [Page] {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PadRow {
     Preset,
+    /// How the controller's hotbar row shows
+    Hotbar,
     /// Index into `PAD_BUTTONS`
     Button(usize),
     /// A wheel section, clockwise from the top
@@ -569,8 +575,9 @@ impl PadRow {
     fn of(row: usize) -> Self {
         match row {
             0 => Self::Preset,
-            r if r <= PAD_BUTTONS.len() => Self::Button(r - 1),
-            r => Self::Wheel(r - 1 - PAD_BUTTONS.len()),
+            1 => Self::Hotbar,
+            r if r < PAD_LAYOUT_ROWS + PAD_BUTTONS.len() => Self::Button(r - PAD_LAYOUT_ROWS),
+            r => Self::Wheel(r - PAD_LAYOUT_ROWS - PAD_BUTTONS.len()),
         }
     }
 }
@@ -1242,6 +1249,11 @@ impl Settings {
             PadRow::Preset => {
                 "Nintendo: A and B, X and Y swapped. A moved button makes it Custom.".to_string()
             }
+            PadRow::Hotbar => {
+                "Always: the row stays. Fade: it dims after a few seconds without a shoulder. On hold: only \
+                 the shoulder's diamond shows."
+                    .to_string()
+            }
             PadRow::Button(b) => format!(
                 "{}: change, then press the button for it. The button you take swaps with it.",
                 PAD_BUTTONS[b].role()
@@ -1283,17 +1295,18 @@ impl Settings {
         if let PadRow::Button(b) = PadRow::of(self.picked)
             && (keys.left || keys.right)
         {
-            self.picked = 1 + (b + PAD_COLUMN) % PAD_BUTTONS.len();
+            self.picked = PAD_LAYOUT_ROWS + (b + PAD_COLUMN) % PAD_BUTTONS.len();
         }
         if self.picked != before {
             self.note = None;
         }
 
         let Loaded { now, defaults, .. } = &mut *loaded;
-        let (old_pad, old_wheel) = (now.pad, now.wheel);
+        let (old_pad, old_wheel, old_hotbar) = (now.pad, now.wheel, now.hotbar);
         if reset_all {
             now.pad = defaults.pad;
             now.wheel = defaults.wheel;
+            now.hotbar = defaults.hotbar;
         }
         match PadRow::of(self.picked) {
             PadRow::Preset => {
@@ -1304,6 +1317,16 @@ impl Settings {
                 }
                 if keys.remove {
                     now.pad = defaults.pad;
+                }
+            }
+            PadRow::Hotbar => {
+                if keys.left {
+                    now.hotbar = now.hotbar.step(false);
+                } else if keys.right || keys.enter {
+                    now.hotbar = now.hotbar.step(true);
+                }
+                if keys.remove {
+                    now.hotbar = defaults.hotbar;
                 }
             }
             PadRow::Button(b) => {
@@ -1327,10 +1350,11 @@ impl Settings {
             }
         }
 
-        // where each row sits on the unscrolled page: the preset, the buttons' two columns, the wheel
+        // where each row sits on the unscrolled page: the preset and the hotbar row, the buttons' two columns,
+        // the wheel
         let heading_h = style::line(ui) + 8.0;
         let preset_top = heading_h;
-        let buttons_heading = preset_top + ROW_H + SECTION_GAP;
+        let buttons_heading = preset_top + PAD_LAYOUT_ROWS as f32 * ROW_H + SECTION_GAP;
         let buttons_top = buttons_heading + heading_h;
         let wheel_heading = buttons_top + PAD_COLUMN as f32 * ROW_H + SECTION_GAP;
         let wheel_top = wheel_heading + heading_h;
@@ -1338,6 +1362,9 @@ impl Settings {
         let col_w = ((area.w - COLUMN_GAP) / 2.0).floor();
         let row_rect = |row: usize, scroll: f32| match PadRow::of(row) {
             PadRow::Preset => Rect::new(area.x, area.y + preset_top - scroll, area.w, ROW_H),
+            PadRow::Hotbar => {
+                Rect::new(area.x, area.y + preset_top + ROW_H - scroll, area.w, ROW_H)
+            }
             PadRow::Button(b) => Rect::new(
                 area.x + (b / PAD_COLUMN) as f32 * (col_w + COLUMN_GAP),
                 area.y + buttons_top + (b % PAD_COLUMN) as f32 * ROW_H - scroll,
@@ -1390,6 +1417,10 @@ impl Settings {
                     style::text(ui, rect.x + ROW_TEXT, baseline, "Preset", style::TEXT);
                     value(ui, rect, Shown::Choice(preset_label(&now.pad)))
                 }
+                PadRow::Hotbar => {
+                    style::text(ui, rect.x + ROW_TEXT, baseline, "Hotbar row", style::TEXT);
+                    value(ui, rect, Shown::Choice(now.hotbar.label()))
+                }
                 PadRow::Button(b) => {
                     let button = PAD_BUTTONS[b];
                     let physical = now.pad.physical(button);
@@ -1428,6 +1459,9 @@ impl Settings {
                 (PadRow::Preset, Tap::Change(how)) => {
                     now.pad = step_preset(&now.pad, how != Change::Prev);
                 }
+                (PadRow::Hotbar, Tap::Change(how)) => {
+                    now.hotbar = now.hotbar.step(how != Change::Prev);
+                }
                 (PadRow::Button(b), _) => self.start_pad_capture(PAD_BUTTONS[b], now_ms),
                 (PadRow::Wheel(w), Tap::Change(how)) => now.wheel.step(w, how != Change::Prev),
                 _ => {}
@@ -1439,6 +1473,9 @@ impl Settings {
         }
         if now.wheel != old_wheel {
             events.push(GameEvent::PadWheelChanged(now.wheel));
+        }
+        if now.hotbar != old_hotbar {
+            events.push(GameEvent::PadHotbarChanged(now.hotbar));
         }
     }
 
@@ -1906,9 +1943,26 @@ mod tests {
     }
 
     #[test]
-    fn enter_on_a_button_waits_for_the_pad_and_left_right_cross_the_columns() {
+    fn the_hotbar_row_steps_and_del_puts_its_default_back() {
         let mut s = on_page(Page::Controller);
         s.picked = 1;
+        assert_eq!(PadRow::of(s.picked), PadRow::Hotbar);
+        let events = frame_on(&mut s, press(|k| k.right = true), |_| {});
+        assert!(matches!(
+            events.as_slice(),
+            [GameEvent::PadHotbarChanged(PadHotbar::Fade)]
+        ));
+        let events = frame_on(&mut s, press(|k| k.remove = true), |_| {});
+        assert!(matches!(
+            events.as_slice(),
+            [GameEvent::PadHotbarChanged(PadHotbar::Always)]
+        ));
+    }
+
+    #[test]
+    fn enter_on_a_button_waits_for_the_pad_and_left_right_cross_the_columns() {
+        let mut s = on_page(Page::Controller);
+        s.picked = PAD_LAYOUT_ROWS;
         frame_on(&mut s, press(|k| k.right = true), |_| {});
         assert_eq!(PadRow::of(s.picked), PadRow::Button(PAD_COLUMN));
         assert_eq!(PAD_BUTTONS[PAD_COLUMN], PadButton::L1);
@@ -1920,7 +1974,7 @@ mod tests {
     #[test]
     fn a_wheel_entry_steps_and_del_puts_its_default_back() {
         let mut s = on_page(Page::Controller);
-        s.picked = 1 + PAD_BUTTONS.len();
+        s.picked = PAD_LAYOUT_ROWS + PAD_BUTTONS.len();
         assert_eq!(PadRow::of(s.picked), PadRow::Wheel(0));
         let events = frame_on(&mut s, press(|k| k.right = true), |_| {});
         let [GameEvent::PadWheelChanged(wheel)] = events.as_slice() else {

@@ -1285,6 +1285,8 @@ pub enum GameEvent {
     PadButtonsChanged(crate::pad::PadButtons),
     /// The Controller page: the wheel's entries, after one changed
     PadWheelChanged(crate::pad::PadWheel),
+    /// The Controller page: how the hotbar row shows
+    PadHotbarChanged(crate::pad::PadHotbar),
     /// Graphic Options' "Frameless HUD" box (`docs/nostalre-hud.md`)
     HudLayoutChanged {
         layout: crate::display::HudLayout,

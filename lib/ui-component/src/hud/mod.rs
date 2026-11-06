@@ -95,8 +95,8 @@ pub struct HudInput {
     pub wheel_chosen: Option<usize>,
 }
 
-/// The windows the HUD draws in its own places: the skill rows (`hotkey_rows` of them), the minimap; a tap on
-/// its menu line
+/// The windows the HUD draws in its own places: the skill rows (or the controller's row), the minimap; a tap
+/// on its menu line
 #[derive(Debug, Clone, Copy)]
 pub struct HudPlacement {
     pub hotkeys: HotkeyDock,
@@ -151,8 +151,8 @@ impl Hud {
         self.touch.hide();
     }
 
-    /// Draws the HUD and returns where the windows it places go
-    pub fn build(&mut self, ui: &mut UiFrame, ctx: &BuildCtx, hotkey_rows: usize) -> HudPlacement {
+    /// Draws the HUD and returns where the windows it places go; `dock_h` is the skill rows' height
+    pub fn build(&mut self, ui: &mut UiFrame, ctx: &BuildCtx, dock_h: f32) -> HudPlacement {
         if let Some(chat) = self.input.chat {
             style::corner_scrim(ui, chat);
         }
@@ -160,7 +160,7 @@ impl Hud {
         let plate = target::build(ui, self.input.target.as_ref(), &mut self.target_trail);
         let minimap = corner::build(ui, ctx, &self.input);
         let menu_tapped = corner::wallet(ui, ctx);
-        let hotkeys = player::build(ui, ctx, &self.input, hotkey_rows, &mut self.hp_trail);
+        let hotkeys = player::build(ui, ctx, &self.input, dock_h, &mut self.hp_trail);
         if let Some(readout) = &self.input.camera {
             camera::readout(ui, readout, plate);
         }

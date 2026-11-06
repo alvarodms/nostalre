@@ -6,6 +6,14 @@ pub const HOTKEY_TOTAL: usize = HOTKEY_ROWS * HOTKEY_COLS;
 /// A controller and the on-screen controls reach the bar in sets of twelve: the 36 slots in three
 pub const PAD_SET_SLOTS: usize = 12;
 pub const PAD_SETS: u8 = (HOTKEY_TOTAL / PAD_SET_SLOTS) as u8;
+/// A set's slots by the shoulders held: L1, L1+R1, R1, four each
+pub const PAD_GROUPS: usize = PAD_SET_SLOTS / 4;
+
+/// The slot a face button reaches in set `set` with shoulder group `group` (0 L1, 1 L1+R1, 2 R1) held; `face` is
+/// 0 to 3 for Y, X, B, A (top, left, right, bottom)
+pub const fn pad_slot(set: u8, group: usize, face: usize) -> usize {
+    PAD_SET_SLOTS * set as usize + 4 * group + face
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum HotkeySlotContent {
@@ -156,6 +164,14 @@ mod tests {
                 level: 3
             }
         );
+    }
+
+    #[test]
+    fn a_set_is_l1s_four_then_the_chords_then_r1s() {
+        assert_eq!(pad_slot(0, 0, 0), 0);
+        assert_eq!(pad_slot(0, 1, 0), 4);
+        assert_eq!(pad_slot(0, 2, 3), 11);
+        assert_eq!(pad_slot(2, 2, 3), HOTKEY_TOTAL - 1);
     }
 
     #[test]

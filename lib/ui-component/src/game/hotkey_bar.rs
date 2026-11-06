@@ -20,6 +20,10 @@ use nostalre_ui::draw::{self, DrawCall, TextOutline, TextureRef};
 use nostalre_ui::frame::{UiFrame, WidgetId, WindowOrder};
 use nostalre_ui::rect::Rect;
 
+#[path = "hotkey_bar_pad.rs"]
+mod pad;
+pub use pad::{PAD_ROW_H, PadBarView};
+
 pub const HOTKEY_BAR_WINDOW_ID: WidgetId = WidgetId(1300);
 const SLOT_BASE_ID: u32 = 1310;
 const CLOSE_BTN_ID: WidgetId = WidgetId(1350);
@@ -232,6 +236,35 @@ pub(crate) fn clear_slot(character: &mut Character, slot: usize) -> GameEvent {
     slot_change(character, slot)
 }
 
+/// A skill's icon cooling down: darkened, kRO's paw over it, the seconds left
+fn cooldown_veil(ui: &mut UiFrame, x: f32, y: f32, icon: f32, remaining: f32, has_grf: bool) {
+    let (v, idx) = draw::quad_vertices(x, y, icon, icon, [0.0, 0.0, 0.0, 0.45]);
+    ui.draw_calls.push(DrawCall {
+        vertices: v.into(),
+        indices: idx.into(),
+        texture: TextureRef::White,
+    });
+    if has_grf {
+        let (v, idx) = draw::quad_vertices(x, y, icon, icon, [1.0; 4]);
+        ui.draw_calls.push(DrawCall {
+            vertices: v.into(),
+            indices: idx.into(),
+            texture: TextureRef::Named(CAT_PAW_TEX.into()),
+        });
+    }
+    if remaining > 0.1 {
+        let time_text = if remaining >= 1.0 {
+            format!("{:.0}", remaining)
+        } else {
+            format!("{:.1}", remaining)
+        };
+        let text_w = ui.atlas.measure_text(&time_text);
+        let tx = x + (icon - text_w) / 2.0;
+        let ty = y + icon / 2.0 + 4.0;
+        ui.text(tx, ty, &time_text, [1.0, 1.0, 1.0, 1.0]);
+    }
+}
+
 /// The key is shown for rows 2-4 only in battle mode: outside it, they trigger
 /// nothing.
 fn slot_tooltip(key: Option<String>, body: Option<String>) -> Option<String> {
@@ -252,6 +285,10 @@ pub struct HotkeyBarWindow {
     pub top_margin: f32,
     /// Set each frame by the frameless HUD: the rows draw there, without the window
     pub dock: Option<HotkeyDock>,
+    /// Set each frame by the client: the controller's row draws in the dock instead of the rows while a
+    /// controller was used last
+    pub pad: Option<PadBarView>,
+    pad_anim: pad::PadAnim,
     bg_size: (f32, f32),
     close_size: (f32, f32),
     resize_start: Option<u8>,
@@ -273,6 +310,8 @@ impl HotkeyBarWindow {
             companion_skills: Vec::new(),
             top_margin: 0.0,
             dock: None,
+            pad: None,
+            pad_anim: pad::PadAnim::default(),
             bg_size: (0.0, 0.0),
             close_size: (0.0, 0.0),
             resize_start: None,
@@ -636,6 +675,16 @@ impl InGameWindow for HotkeyBarWindow {
         }
 
         let visible_rows = character.hotkeys.visible_rows() as usize;
+        if let (Some(dock), Some(view)) = (self.dock, self.pad.filter(|_| ui.ctx.pad_labels)) {
+            self.described_skill = None;
+            self.build_pad_row(ui, character, data, dock, view, &mut events);
+            if visible_rows > 0 {
+                self.keyboard_slots(ui, character, data, visible_rows, &mut events);
+            }
+            return events;
+        }
+        // presses meant for the controller's row, while it is not drawn: none waits for it to come back
+        self.pad_anim.pressed.clear();
         if visible_rows == 0 {
             return events;
         }
@@ -746,34 +795,8 @@ impl InGameWindow for HotkeyBarWindow {
                     if let HotkeySlotContent::Skill { skill, .. } = content
                         && character.cooldowns.is_on_cooldown(skill, ui.elapsed_secs)
                     {
-                        let (v, idx) =
-                            draw::quad_vertices(icon_x, icon_y, icon, icon, [0.0, 0.0, 0.0, 0.45]);
-                        ui.draw_calls.push(DrawCall {
-                            vertices: v.into(),
-                            indices: idx.into(),
-                            texture: TextureRef::White,
-                        });
-                        if has_grf {
-                            let (v, idx) =
-                                draw::quad_vertices(icon_x, icon_y, icon, icon, [1.0; 4]);
-                            ui.draw_calls.push(DrawCall {
-                                vertices: v.into(),
-                                indices: idx.into(),
-                                texture: TextureRef::Named(CAT_PAW_TEX.into()),
-                            });
-                        }
                         let remaining = character.cooldowns.remaining_secs(skill, ui.elapsed_secs);
-                        if remaining > 0.1 {
-                            let time_text = if remaining >= 1.0 {
-                                format!("{:.0}", remaining)
-                            } else {
-                                format!("{:.1}", remaining)
-                            };
-                            let text_w = ui.atlas.measure_text(&time_text);
-                            let tx = icon_x + (icon - text_w) / 2.0;
-                            let ty = icon_y + icon / 2.0 + 4.0;
-                            ui.text(tx, ty, &time_text, [1.0, 1.0, 1.0, 1.0]);
-                        }
+                        cooldown_veil(ui, icon_x, icon_y, icon, remaining, has_grf);
                     }
 
                     if resp.double_clicked() {
@@ -916,6 +939,21 @@ impl InGameWindow for HotkeyBarWindow {
             }
         }
 
+        self.keyboard_slots(ui, character, data, visible_rows, &mut events);
+        events
+    }
+}
+
+impl HotkeyBarWindow {
+    /// The keyboard's slots: F1 to F9 the first row, and in battle mode the rows shown under it by their keys
+    fn keyboard_slots(
+        &self,
+        ui: &mut UiFrame,
+        character: &Character,
+        data: &nostalre_game::data_table::DataTable,
+        visible_rows: usize,
+        events: &mut Vec<GameEvent>,
+    ) {
         let f_keys = [
             ui.ctx.key_f1,
             ui.ctx.key_f2,
@@ -929,7 +967,7 @@ impl InGameWindow for HotkeyBarWindow {
         ];
         for (i, &pressed) in f_keys.iter().enumerate() {
             if pressed {
-                self.execute_slot(i, character, data.skill_use_level.as_ref(), &mut events);
+                self.execute_slot(i, character, data.skill_use_level.as_ref(), events);
             }
         }
 
@@ -942,7 +980,7 @@ impl InGameWindow for HotkeyBarWindow {
                             HOTKEY_COLS + col,
                             character,
                             data.skill_use_level.as_ref(),
-                            &mut events,
+                            events,
                         );
                     }
                 } else if let Some(col) = ROW3_KEYS.iter().position(|&c| c == code) {
@@ -951,7 +989,7 @@ impl InGameWindow for HotkeyBarWindow {
                             HOTKEY_COLS * 2 + col,
                             character,
                             data.skill_use_level.as_ref(),
-                            &mut events,
+                            events,
                         );
                     }
                 } else if let Some(col) = ROW4_KEYS.iter().position(|&c| c == code)
@@ -961,13 +999,11 @@ impl InGameWindow for HotkeyBarWindow {
                         HOTKEY_COLS * 3 + col,
                         character,
                         data.skill_use_level.as_ref(),
-                        &mut events,
+                        events,
                     );
                 }
             }
         }
-
-        events
     }
 }
 
