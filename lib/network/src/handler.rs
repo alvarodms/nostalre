@@ -326,6 +326,7 @@ pub fn dispatch_packet(packet: &dyn Packet) -> Vec<GameEvent> {
         return vec![GameEvent::ServerTick {
             server_tick: p.time,
             local_send_time_ms: 0,
+            local_recv_time_ms: 0,
         }];
     }
     if let Some(p) = any.downcast_ref::<PacketZcHighjump>() {
