@@ -1056,6 +1056,9 @@ pub enum GameEvent {
         sub_y: u8,
         count: i16,
         is_falling: bool,
+        /// The pillar it drops with (0x0add's `dropeffectmode`, when `showdropeffect` is set): see
+        /// `kro_classes::drop_pillar_effect`
+        drop_effect: Option<u16>,
     },
     FloorItemDisappeared {
         id: u32,
