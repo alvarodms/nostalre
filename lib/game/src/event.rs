@@ -65,6 +65,9 @@ pub enum GameEvent {
     ServerTick {
         server_tick: u32,
         local_send_time_ms: u32,
+        /// When the network thread got the reply, so a reply the game reads late (the app off screen) still
+        /// measures the round trip, not the wait
+        local_recv_time_ms: u32,
     },
     Disconnected(String),
     RequestLogin {

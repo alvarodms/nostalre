@@ -635,11 +635,15 @@ impl App {
         }
     }
 
-    pub(super) fn handle_server_tick(&mut self, server_tick: u32, local_send_time_ms: u32) {
-        let local_now_ms = self.start_time.elapsed().as_millis() as u32;
+    pub(super) fn handle_server_tick(
+        &mut self,
+        server_tick: u32,
+        local_send_time_ms: u32,
+        local_recv_time_ms: u32,
+    ) {
         self.game.session.server_time.on_server_tick(
             server_tick,
-            local_now_ms,
+            local_recv_time_ms,
             local_send_time_ms,
             self.config.custom.latency_coupled_walk,
         );

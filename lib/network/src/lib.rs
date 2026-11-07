@@ -122,6 +122,22 @@ pub enum NetworkCommand {
     SetKeepalive(KeepaliveMode),
 }
 
+/// Stamps a time reply with the moment it reaches the game's queue (after any debug delay).
+fn stamp_received(event: GameEvent, start_time: Instant) -> GameEvent {
+    match event {
+        GameEvent::ServerTick {
+            server_tick,
+            local_send_time_ms,
+            ..
+        } => GameEvent::ServerTick {
+            server_tick,
+            local_send_time_ms,
+            local_recv_time_ms: start_time.elapsed().as_millis() as u32,
+        },
+        other => other,
+    }
+}
+
 pub async fn network_loop(
     mut cmd_rx: mpsc::UnboundedReceiver<NetworkCommand>,
     event_tx: mpsc::UnboundedSender<GameEvent>,
@@ -145,7 +161,7 @@ pub async fn network_loop(
             .is_some_and(|(t, _)| *t <= Instant::now())
         {
             let (_, event) = delayed_events.pop_front().unwrap();
-            let _ = event_tx.send(event);
+            let _ = event_tx.send(stamp_received(event, start_time));
         }
 
         let mut ready_sends: Vec<Vec<u8>> = Vec::new();
@@ -196,15 +212,17 @@ pub async fn network_loop(
                                 }
                                 for event in events {
                                     let event = match event {
-                                        GameEvent::ServerTick { server_tick, .. } => {
-                                            GameEvent::ServerTick { server_tick, local_send_time_ms: keepalive_send_time_ms }
-                                        }
+                                        GameEvent::ServerTick { server_tick, .. } => GameEvent::ServerTick {
+                                            server_tick,
+                                            local_send_time_ms: keepalive_send_time_ms,
+                                            local_recv_time_ms: 0,
+                                        },
                                         other => other,
                                     };
                                     if debug_delay_ms > 0 {
                                         delayed_events.push_back((Instant::now() + delay_duration, event));
                                     } else {
-                                        let _ = event_tx.send(event);
+                                        let _ = event_tx.send(stamp_received(event, start_time));
                                     }
                                 }
                             }

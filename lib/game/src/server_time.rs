@@ -3,6 +3,8 @@ const RENDER_LAG_MS: u32 = 72;
 /// Estimate lead that counts a packet as late, and the size of the step back.
 const LATE_STEP_MS: u32 = 144;
 const LATE_PACKETS_BEFORE_STEP: u32 = 4;
+/// Round trips this long or longer are not taken as samples of the link.
+const MAX_RTT_SAMPLE_MS: u32 = 1000;
 
 pub struct ServerTimeClock {
     server_tick_at_sync: u32,
@@ -47,16 +49,17 @@ impl ServerTimeClock {
         latency_coupled: bool,
     ) {
         let rtt = local_now_ms.saturating_sub(local_send_time_ms);
-        if rtt < 1000 {
+        // A second or more is a stall, not the link: kept out of the average, which leads the estimate by half
+        // of it and takes minutes to forget a spike (hits landing before their swing).
+        if rtt < MAX_RTT_SAMPLE_MS {
             self.last_rtt = rtt;
+            if self.rtt_sample_count == 0 {
+                self.rtt_average = rtt as f32;
+            } else {
+                self.rtt_average = self.rtt_average * 0.8 + rtt as f32 * 0.2;
+            }
+            self.rtt_sample_count += 1;
         }
-
-        if self.rtt_sample_count == 0 {
-            self.rtt_average = rtt as f32;
-        } else {
-            self.rtt_average = self.rtt_average * 0.8 + rtt as f32 * 0.2;
-        }
-        self.rtt_sample_count += 1;
 
         self.latency_coupled = latency_coupled;
         self.late_packets = 0;
@@ -196,6 +199,20 @@ mod tests {
         assert_eq!(clock.rtt(), 100);
         clock.on_server_tick(2000, 2300, 300, false);
         assert_eq!(clock.rtt(), 100);
+    }
+
+    #[test]
+    fn stalled_round_trip_leaves_average_and_estimate_alone() {
+        let mut clock = ServerTimeClock::new();
+        for i in 0..5u32 {
+            clock.on_server_tick(i * 1000, i * 1000 + 100, i * 1000, false);
+        }
+        let avg = clock.rtt_avg();
+        // a reply read a minute late: the estimate must not lead the server by half of that
+        clock.on_server_tick(70_000, 70_100 + 60_000, 70_000, false);
+        assert_eq!(clock.rtt_avg(), avg);
+        let est = clock.estimated_server_tick(130_100);
+        assert_eq!(est, 70_000 + (avg / 2.0) as u32);
     }
 
     #[test]

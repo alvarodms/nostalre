@@ -1447,8 +1447,9 @@ impl App {
                 GameEvent::ServerTick {
                     server_tick,
                     local_send_time_ms,
+                    local_recv_time_ms,
                 } => {
-                    self.handle_server_tick(server_tick, local_send_time_ms);
+                    self.handle_server_tick(server_tick, local_send_time_ms, local_recv_time_ms);
                 }
                 GameEvent::HotkeyListReceived { slots } => {
                     self.game.character.hotkeys.set_from_server(&slots);
