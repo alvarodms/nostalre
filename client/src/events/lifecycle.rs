@@ -144,6 +144,7 @@ impl App {
                 self.game.effect_keys.level_aura_keys.clear();
                 self.game.effect_keys.boss_aura_keys.clear();
                 self.game.effect_keys.warp_portal_keys.clear();
+                self.game.effect_keys.drop_pillar_keys.clear();
                 self.game.effect_keys.sight_aura_keys.clear();
                 self.game.effect_keys.ruwach_aura_keys.clear();
                 self.game.schedulers.day_night.reset();
