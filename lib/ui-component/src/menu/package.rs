@@ -1,5 +1,6 @@
-//! A selection box opened on the Items screen: its choices down the left, what the picked one gives on the right with
-//! the item's art and description (more than kRO's window shows: a choice is worth comparing before it is taken).
+//! A selection box opened on the Items screen, over the bag as the skill-bar picker is: its choices down the left,
+//! what the picked one gives on the right with the item's art and description (more than kRO's window shows: a
+//! choice is worth comparing before it is taken).
 //! → steps into a choice's items when it gives several, ← back; Enter asks in the footer, and a yes sends the pick
 //! ([`GameEvent::RequestUsePackageItem`]). Escape steps back: out of the question, the items, then the box.
 use super::ROW_BASE_ID;
@@ -13,8 +14,17 @@ use nostalre_ui::frame::{UiFrame, WidgetId};
 use nostalre_ui::rect::Rect;
 
 const LIST_SHARE: f32 = 0.42;
-/// The items' rows, past the choices' in the rows' range
+/// The choices' rows, past the bag's under them in the rows' range
+const CHOICE_ROW_BASE: u32 = ROW_BASE_ID + 100;
+/// The items' rows, past the choices'
 const ITEM_ROW_BASE: u32 = ROW_BASE_ID + 200;
+/// Over the bag, as the skill-bar picker shades the page
+const SHADE: [f32; 4] = style::shade(0.88);
+/// The chooser's widest, centred over the page
+const PANEL_MAX_W: f32 = 1100.0;
+const PANEL_PAD: f32 = 16.0;
+/// What the player has to do, under the box's name
+const PROMPT: &str = "Choose one to receive. The box is used up once you confirm.";
 /// The most item rows over the description
 const ITEM_ROWS: usize = 4;
 
@@ -81,8 +91,9 @@ impl Chooser {
                 if choice.items.len() > 1 {
                     hints.push(Hint::LOOK_RIGHT);
                 }
-                hints.extend([choose, Hint::BACK]);
-                (choice.name.clone(), hints)
+                hints.extend([choose, Hint::CANCEL]);
+                let count = self.package.choices.len();
+                (format!("Choose 1 of {count}: {}", choice.name), hints)
             }
         }
     }
@@ -135,12 +146,26 @@ impl Chooser {
             }
         }
 
-        let top = frame::section(ui, area.x, area.y, area.w, &self.package.title);
+        // the bag shaded under it, the chooser centred: the box's name, what to do, then the choices
+        style::fill(ui, area, SHADE);
+        let w = (area.w - 2.0 * PANEL_PAD).clamp(0.0, PANEL_MAX_W);
+        let area = Rect::new(
+            area.x + ((area.w - w) / 2.0).floor(),
+            area.y + PANEL_PAD,
+            w,
+            (area.h - 2.0 * PANEL_PAD).max(0.0),
+        );
+        let mut top = frame::section(ui, area.x, area.y, area.w, &self.package.title);
+        for line in style::wrap(ui, PROMPT, area.w) {
+            style::text(ui, area.x, style::baseline(ui, top), &line, style::ACCENT);
+            top += style::line(ui);
+        }
+        top += 12.0;
         let list = Rect::new(
             area.x,
             top,
             (area.w * LIST_SHARE).floor(),
-            area.y + area.h - top,
+            (area.y + area.h - top).max(0.0),
         );
         let visible = (list.h / ROW_H).floor() as usize;
         frame::scroll(
@@ -162,7 +187,7 @@ impl Chooser {
             .enumerate()
         {
             let rect = Rect::new(list.x, list.y + slot as f32 * ROW_H, list.w, ROW_H);
-            let id = WidgetId(ROW_BASE_ID + slot as u32);
+            let id = WidgetId(CHOICE_ROW_BASE + slot as u32);
             let resp = frame::row(ui, id, rect, i == self.picked && self.looking.is_none());
             let name = style::fit(ui, &choice.name, rect.w - frame::ROW_TEXT - 8.0);
             let baseline = frame::row_baseline(ui, rect);
@@ -301,7 +326,12 @@ mod tests {
         };
         let (events, sent) = frame_on(&mut chooser, &mut character, &data, enter);
         assert!(events.is_empty() && !sent, "Enter only asks");
-        assert!(chooser.footer(&BuildCtx::test(&mut character, &data)).0.starts_with("Take "));
+        assert!(
+            chooser
+                .footer(&BuildCtx::test(&mut character, &data))
+                .0
+                .starts_with("Take ")
+        );
         // while it asks, the arrows do nothing
         frame_on(&mut chooser, &mut character, &data, up);
         let (events, sent) = frame_on(&mut chooser, &mut character, &data, enter);
@@ -336,7 +366,11 @@ mod tests {
             ..Default::default()
         };
         frame_on(&mut chooser, &mut character, &data, down);
-        assert_eq!((chooser.picked, chooser.looking), (6, Some(1)), "down moves in the items");
+        assert_eq!(
+            (chooser.picked, chooser.looking),
+            (6, Some(1)),
+            "down moves in the items"
+        );
 
         chooser.asking = true;
         assert!(chooser.back(), "out of the question");

@@ -124,9 +124,14 @@ impl Items {
             .collect()
     }
 
-    /// Whether the drop question is up: the screen under it takes no taps
+    /// Whether the drop question or a selection box is up: the screen under it takes no taps
     pub fn asking(&self) -> bool {
-        self.dropping.is_some()
+        self.dropping.is_some() || self.choosing.is_some()
+    }
+
+    /// Whether a selection box is up over the bag: the keys are its ([`Items::build_chooser`])
+    pub fn choosing(&self) -> bool {
+        self.choosing.is_some()
     }
 
     /// Escape out of the drop question, or a step back out of an open selection box
@@ -146,7 +151,7 @@ impl Items {
         self.choosing = None;
     }
 
-    /// A selection box opened: its choices in place of the bag
+    /// A selection box opened: its choices over the bag
     pub fn choose(&mut self, package: SelectPackage) {
         self.dropping = None;
         self.choosing = Some(Chooser::new(package));
@@ -203,13 +208,6 @@ impl Items {
         to_bar: &mut Option<ToBar>,
         events: &mut Vec<GameEvent>,
     ) {
-        if let Some(chooser) = &mut self.choosing {
-            // the box used, dropped or moved meanwhile: back to the bag
-            if !chooser.still_there(ctx) || chooser.build(ui, ctx, area, keys, textures, events) {
-                self.choosing = None;
-            }
-            return;
-        }
         let asked = self.ask(ui, &ctx.character.inventory, keys, events);
         // while it asks, the keys are the question's
         let keys = &if asked { Keys::default() } else { *keys };
@@ -272,7 +270,8 @@ impl Items {
             style::text(ui, list.x + frame::ROW_TEXT, baseline, EMPTY, style::DIM);
         }
 
-        if let Some(item) = shown.get(self.picked) {
+        // under a selection box the bag's list shows through, its detail is the box's
+        if let Some(item) = shown.get(self.picked).filter(|_| self.choosing.is_none()) {
             let x = list.x + list.w + COLUMN_GAP;
             let detail = Rect::new(x, list.y, area.x + area.w - x, list.h);
             let producers = &character.char_names;
@@ -302,6 +301,24 @@ impl Items {
                 count: item.count.max(1),
                 typed: None,
             });
+        }
+    }
+
+    /// The selection box over the bag, drawn in the menu's window over the page with the keys the page did not
+    /// get; it goes once a choice is sent, or the box is used, dropped or moved meanwhile
+    pub fn build_chooser(
+        &mut self,
+        ui: &mut UiFrame,
+        ctx: &mut BuildCtx,
+        area: Rect,
+        keys: &Keys,
+        textures: &mut Textures,
+        events: &mut Vec<GameEvent>,
+    ) {
+        if let Some(chooser) = &mut self.choosing
+            && (!chooser.still_there(ctx) || chooser.build(ui, ctx, area, keys, textures, events))
+        {
+            self.choosing = None;
         }
     }
 
