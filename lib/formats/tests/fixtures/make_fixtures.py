@@ -66,6 +66,36 @@ def item_resources():
             "501#빨간포션#\n664#선물상자_1#\n// a comment\n502##\nnot-an-id#x#\n")
 
 
+def select_packages():
+    # as kRO's selectpackageitem_cln.lub: the names, what each choice gives, and the function the exe calls
+    return HEADER + """SelectPackageItemData = {
+	TabNameTbl = {
+		[101454] = {
+			[0] = "+7 금속 양손검",
+			[1] = "+7 Metal Lance"
+		},
+		[101470] = {
+			[6] = "1x Reduction Potion of each"
+		}
+	},
+	PackageTbl = {
+		[101454] = {
+			[0] = { [0] = {item = 21005, cnt = 1, hour = 0, refine = 7, randomOption = false, grade = 0, type = 9} },
+			[1] = { [0] = {item = 1493, cnt = 1, hour = 0, refine = 7, randomOption = false, grade = 0, type = 9} }
+		}
+	}
+}
+
+function LoadTable()
+	for packageID, tabs in pairs(SelectPackageItemData.TabNameTbl) do
+		for tabID, name in pairs(tabs) do
+			AddTab(packageID, tabID, name, 1)
+		end
+	end
+end
+"""
+
+
 def compile_lub(luac, source, out):
     subprocess.run([luac, "-o", str(HERE / out), str(HERE / source)], check=True)
 
@@ -83,6 +113,10 @@ def main():
         compile_lub(luac, "jobidentity.lua", f"npcid_lua{version}.lub")
     compile_lub(os.environ["LUAC51"], "jobname.lua", "jname_lua51.lub")
     compile_lub(os.environ["LUAC51"], "signboardlist.lua", "signboardlist_lua51.lub")
+    write("selectpackageitem.lua", select_packages())
+    # a 64-bit Lua 5.1 luac (scripts/build-luac.sh host): the parser reads both sizes, as iteminfo_lua51_64bit.lub
+    if os.environ.get("LUAC51_64"):
+        compile_lub(os.environ["LUAC51_64"], "selectpackageitem.lua", "selectpackageitem_lua51_64bit.lub")
 
 
 if __name__ == "__main__":

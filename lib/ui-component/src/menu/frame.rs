@@ -230,6 +230,9 @@ impl Hint {
     pub const ENTER_YES: Hint = Hint::tap("Enter", "yes", Key::Enter);
     pub const ESC_NO: Hint = Hint::tap("Esc", "no", Key::Back);
     pub const TO_BAR: Hint = Hint::tap("S", "to bar", Key::ToBar);
+    /// Over to a selection box's contents, and back to its choices
+    pub const LOOK_RIGHT: Hint = Hint::shown("→", "D-pad →", "look at items");
+    pub const LOOK_LEFT: Hint = Hint::shown("←", "D-pad ←", "choices");
     pub const CANCEL: Hint = Hint::tap("Esc", "cancel", Key::Back);
 
     const fn shown(cap: &'static str, pad: &'static str, label: &'static str) -> Self {

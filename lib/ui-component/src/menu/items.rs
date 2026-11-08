@@ -3,6 +3,7 @@ use super::ROW_BASE_ID;
 use super::bar_picker::ToBar;
 use super::frame::{self, COLUMN_GAP, Hint, Key, Keys, ROW_H, TABS_H, Textures};
 use super::item_detail::{ItemDetail, display_name, item_row};
+use super::package::Chooser;
 use crate::BuildCtx;
 use crate::game::hotkey_bar::item_fits;
 use crate::game::inventory_window::activate;
@@ -12,6 +13,7 @@ use nostalre_game::character::Character;
 use nostalre_game::event::GameEvent;
 use nostalre_game::inventory::InventoryData;
 use nostalre_game::item::{InventoryTab, Item};
+use nostalre_game::select_package::SelectPackage;
 use nostalre_ui::frame::{UiFrame, WidgetId};
 use nostalre_ui::rect::Rect;
 
@@ -31,6 +33,8 @@ pub(super) struct Items {
     detail: ItemDetail,
     /// How many of a stack to drop, while the player says
     dropping: Option<DropPrompt>,
+    /// A selection box opened: its choices take the screen until one is taken or the player backs out
+    choosing: Option<Chooser>,
 }
 
 /// The drop question: for the item at `index`, as long as it is still that item
@@ -120,17 +124,43 @@ impl Items {
             .collect()
     }
 
-    /// Whether the drop question is up: the screen under it takes no taps
+    /// Whether the drop question or a selection box is up: the screen under it takes no taps
     pub fn asking(&self) -> bool {
-        self.dropping.is_some()
+        self.dropping.is_some() || self.choosing.is_some()
     }
 
-    /// Escape out of the drop question
+    /// Whether a selection box is up over the bag: the keys are its ([`Items::build_chooser`])
+    pub fn choosing(&self) -> bool {
+        self.choosing.is_some()
+    }
+
+    /// Escape out of the drop question, or a step back out of an open selection box
     pub fn back(&mut self) -> bool {
+        if let Some(chooser) = &mut self.choosing {
+            if !chooser.back() {
+                self.choosing = None;
+            }
+            return true;
+        }
         self.dropping.take().is_some()
     }
 
+    /// Another screen: what this one was asking goes away
+    pub fn leave(&mut self) {
+        self.dropping = None;
+        self.choosing = None;
+    }
+
+    /// A selection box opened: its choices over the bag
+    pub fn choose(&mut self, package: SelectPackage) {
+        self.dropping = None;
+        self.choosing = Some(Chooser::new(package));
+    }
+
     pub fn footer(&self, ctx: &BuildCtx) -> (String, Vec<Hint>) {
+        if let Some(chooser) = &self.choosing {
+            return chooser.footer(ctx);
+        }
         let c = &*ctx.character;
         if let Some((prompt, item)) = self
             .dropping
@@ -240,7 +270,8 @@ impl Items {
             style::text(ui, list.x + frame::ROW_TEXT, baseline, EMPTY, style::DIM);
         }
 
-        if let Some(item) = shown.get(self.picked) {
+        // under a selection box the bag's list shows through, its detail is the box's
+        if let Some(item) = shown.get(self.picked).filter(|_| self.choosing.is_none()) {
             let x = list.x + list.w + COLUMN_GAP;
             let detail = Rect::new(x, list.y, area.x + area.w - x, list.h);
             let producers = &character.char_names;
@@ -270,6 +301,24 @@ impl Items {
                 count: item.count.max(1),
                 typed: None,
             });
+        }
+    }
+
+    /// The selection box over the bag, drawn in the menu's window over the page with the keys the page did not
+    /// get; it goes once a choice is sent, or the box is used, dropped or moved meanwhile
+    pub fn build_chooser(
+        &mut self,
+        ui: &mut UiFrame,
+        ctx: &mut BuildCtx,
+        area: Rect,
+        keys: &Keys,
+        textures: &mut Textures,
+        events: &mut Vec<GameEvent>,
+    ) {
+        if let Some(chooser) = &mut self.choosing
+            && (!chooser.still_there(ctx) || chooser.build(ui, ctx, area, keys, textures, events))
+        {
+            self.choosing = None;
         }
     }
 

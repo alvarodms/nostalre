@@ -34,6 +34,38 @@ fn pickup_failure_notice(result: u8) -> Option<(u16, [f32; 4])> {
 }
 
 impl App {
+    /// A selection box used: its choices opened (the desktop window, or the frameless HUD's menu) instead of the
+    /// use going to the server, which would do nothing with it. False for any other item.
+    pub(crate) fn open_select_package(&mut self, index: u16) -> bool {
+        let Some(item_id) = self
+            .game
+            .character
+            .inventory
+            .get_item(index)
+            .map(|i| i.item_id)
+        else {
+            return false;
+        };
+        let data = &self.game.data_table;
+        let Some(package) = nostalre_game::select_package::SelectPackage::new(index, item_id, data)
+        else {
+            return false;
+        };
+        let icons = package
+            .choices
+            .iter()
+            .flat_map(|c| c.items)
+            .filter_map(|i| i.to_item(data).icon_path())
+            .collect();
+        self.preload_item_icons(icons);
+        if self.windows.hud.is_modern() {
+            self.windows.menu.choose_package(package);
+        } else {
+            self.windows.select_package_window.open(package);
+        }
+        true
+    }
+
     pub(crate) fn item_is_book(&self, item_id: u32) -> bool {
         self.grf
             .as_ref()

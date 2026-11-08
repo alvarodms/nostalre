@@ -209,3 +209,31 @@ fn skill_info_list_needs_the_ids_it_indexes() {
 
     assert!(lua_table::parse_skill_info_sp_amounts(&[list]).is_err());
 }
+
+/// kRO's selection boxes' choice names, from the English source text and from a compiled chunk alike
+#[test]
+fn parse_select_package_names_from_source_and_chunk() {
+    for (what, chunk) in [
+        (
+            "source",
+            &include_bytes!("fixtures/selectpackageitem.lua")[..],
+        ),
+        (
+            "chunk",
+            &include_bytes!("fixtures/selectpackageitem_lua51_64bit.lub")[..],
+        ),
+    ] {
+        let names = lua_table::parse_select_package_names(chunk).expect(what);
+        assert_eq!(names.len(), 2, "{what}");
+        let metal = &names[&101454];
+        assert_eq!(metal[&0], "+7 금속 양손검", "{what}: EUC-KR text");
+        assert_eq!(metal[&1], "+7 Metal Lance", "{what}");
+        assert_eq!(names[&101470][&6], "1x Reduction Potion of each", "{what}");
+    }
+    // a file without the table reads as no names, not an error
+    assert!(
+        lua_table::parse_select_package_names(b"x = 1")
+            .unwrap()
+            .is_empty()
+    );
+}

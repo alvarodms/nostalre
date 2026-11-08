@@ -75,6 +75,7 @@ pub use sender::{
     build_status_gm_packet, build_stylist_buy_packet, build_stylist_close_packet,
     build_trait_stat_change_packet, build_trycapture_packet, build_unequip_all_packet,
     build_unequip_item_packet, build_upgrade_skill_packet, build_use_item_packet,
+    build_use_package_item_packet,
     build_use_skill_packet, build_use_skill_to_ground_packet,
     build_use_skill_to_ground_with_talkbox_packet, build_user_count_packet, build_whisper_packet,
     build_zone_enter_packet,

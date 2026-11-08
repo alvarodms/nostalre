@@ -7,6 +7,7 @@ mod frame;
 mod home;
 mod item_detail;
 mod items;
+mod package;
 mod party;
 mod quests;
 mod settings;
@@ -27,7 +28,7 @@ pub use settings::SettingsValues;
 pub const MENU_WINDOW_ID: WidgetId = WidgetId(6300);
 const MENU_BG_ID: WidgetId = WidgetId(6301);
 const CRUMB_ID: WidgetId = WidgetId(6302);
-/// The skill-bar picker and the drop question, a window over the screen so the screen under it takes no taps
+/// The skill-bar picker, the drop question and a selection box, a window over the screen so the screen under it takes no taps
 const MODAL_ID: WidgetId = WidgetId(6303);
 /// The commands, 6310 to 6329
 const CMD_BASE_ID: u32 = 6310;
@@ -228,7 +229,7 @@ impl Menu {
     fn set_screen(&mut self, screen: Screen) {
         self.screen = screen;
         self.picker = None;
-        self.items.back();
+        self.items.leave();
         self.equipment.back();
         self.settings.leave();
         self.party.leave();
@@ -317,6 +318,12 @@ impl Menu {
             self.set_screen(screen);
             self.cursor = command_index(|c| c.screen() == Some(screen));
         }
+    }
+
+    /// A selection box used (from the bag or the skill bar): the menu open on Items, the box's choices up
+    pub fn choose_package(&mut self, package: nostalre_game::select_package::SelectPackage) {
+        self.open_on(HotkeyAction::ToggleInventory);
+        self.items.choose(package);
     }
 
     pub fn close(&mut self) {
@@ -499,7 +506,8 @@ impl InGameWindow for Menu {
             keys = Keys::default();
         }
         let picker_keys = keys;
-        if self.picker.is_some() {
+        let choosing = self.screen == Screen::Items && self.items.choosing();
+        if self.picker.is_some() || choosing {
             keys = Keys::default();
         }
         let mut to_bar = None;
@@ -567,6 +575,11 @@ impl InGameWindow for Menu {
             && picker.build(ui, ctx, area, &picker_keys, &mut self.textures, &mut events)
         {
             self.picker = None;
+        }
+        if choosing {
+            let textures = &mut self.textures;
+            self.items
+                .build_chooser(ui, ctx, area, &picker_keys, textures, &mut events);
         }
         events
     }
@@ -752,6 +765,42 @@ mod tests {
         menu.toggle_for(HotkeyAction::ToggleEquipment);
         frame_on(&mut menu, &mut character, |ui| ui.key_up = true);
         assert!(frame_on(&mut menu, &mut character, |ui| ui.key_delete = true).is_empty());
+    }
+
+    #[test]
+    fn a_selection_box_takes_the_keys_over_the_bag_and_escape_leaves_it() {
+        use nostalre_game::item::{Item, ItemType};
+        use nostalre_game::select_package::SelectPackage;
+        // the Reduction Potion box, next to the potions the bag would use on Enter
+        const POTION_BOX: u32 = 101470;
+        let data = DataTable::new();
+        let mut character = potions(5);
+        let mut item = Item::from_tables(POTION_BOX, ItemType::Usable, &data);
+        item.index = 12;
+        character.inventory.add_item(item);
+        let mut menu = Menu::default();
+        menu.choose_package(SelectPackage::new(12, POTION_BOX, &data).unwrap());
+        assert!(menu.is_open() && menu.items.asking());
+
+        // Enter asks about the first choice, the bag under it uses nothing
+        let events = frame_on(&mut menu, &mut character, |ui| ui.key_enter = true);
+        assert!(events.is_empty());
+        let events = frame_on(&mut menu, &mut character, |ui| ui.key_enter = true);
+        assert!(matches!(
+            events.as_slice(),
+            [GameEvent::RequestUsePackageItem {
+                index: 12,
+                box_id: POTION_BOX,
+                group: 0
+            }]
+        ));
+        assert!(!menu.items.choosing());
+
+        // Escape takes the box away and leaves the menu on the bag
+        menu.choose_package(SelectPackage::new(12, POTION_BOX, &data).unwrap());
+        menu.on_escape(&mut BuildCtx::test(&mut character, &data));
+        assert!(!menu.items.choosing());
+        assert!(menu.is_open() && menu.screen == Screen::Items);
     }
 
     #[test]

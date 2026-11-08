@@ -255,6 +255,7 @@ pub fn build_in_game_ui(
     events.extend(windows.npc_shop.build(ui, &mut ctx));
     events.extend(windows.warp_list_window.build(ui));
     events.extend(windows.item_list_selection_window.build(ui));
+    events.extend(windows.select_package_window.build(ui, &ctx));
     windows.system_menu.can_resurrect = windows.system_menu.dead
         && !game.session.map_properties.enable_pk()
         && !game.session.map_properties.is_siege()

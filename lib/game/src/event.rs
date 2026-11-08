@@ -789,6 +789,20 @@ pub enum GameEvent {
     RequestUseItem {
         index: u16,
     },
+    /// A selection box's choice picked in the desktop window: asked again, as kRO asks (msgstringtable 3975)
+    AskUsePackageItem {
+        index: u16,
+        box_id: u32,
+        group: u32,
+        name: String,
+    },
+    /// A selection box opened on its choice `group` (CZ_USE_PACKAGEITEM, 0x0baf): the server takes the box and gives
+    /// what its item_packages.yml lists under that number, with no answer of its own
+    RequestUsePackageItem {
+        index: u16,
+        box_id: u32,
+        group: u32,
+    },
     RequestEquipItem {
         index: u16,
         location: u32,

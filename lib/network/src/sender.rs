@@ -318,6 +318,10 @@ mod tests {
             ),
             case!("clif_parse_CloseKafra", build_close_store_packet(pv)),
             case!(
+                "clif_parse_itempackage_select",
+                build_use_package_item_packet(2, 2000000, 101454, 3, pv)
+            ),
+            case!(
                 "clif_parse_NpcBuyListSend",
                 build_purchase_item_list_packet(&[(1, 501)], pv)
             ),
@@ -1604,6 +1608,24 @@ pub fn build_use_item_packet(index: u16, account_id: u32, packetver: u32) -> Vec
     pkt.set_aid(account_id);
     pkt.fill_raw_with_packetver(Some(packetver));
     pkt.raw
+}
+
+/// CZ_USE_PACKAGEITEM (0x0baf): a selection box's choice. Hand-encoded: the generated packets predate it.
+/// `index` is the box's, as the client numbers the inventory (the server takes 2 off, as for 0x0439)
+pub fn build_use_package_item_packet(
+    index: u16,
+    account_id: u32,
+    box_id: u32,
+    group: u32,
+    _packetver: u32,
+) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(16);
+    buf.extend_from_slice(&0x0bafu16.to_le_bytes());
+    buf.extend_from_slice(&index.to_le_bytes());
+    buf.extend_from_slice(&account_id.to_le_bytes());
+    buf.extend_from_slice(&box_id.to_le_bytes());
+    buf.extend_from_slice(&group.to_le_bytes());
+    buf
 }
 
 pub fn build_equip_item_packet(index: u16, location: u32, packetver: u32) -> Vec<u8> {

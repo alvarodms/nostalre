@@ -941,6 +941,8 @@ impl ApplicationHandler for App {
                     let item_info = nostalre_game::data_table::load_item_info(&grf);
                     self.game.data_table.styling_shop =
                         nostalre_game::data_table::load_styling_shop(&grf);
+                    self.game.data_table.package_names =
+                        nostalre_game::data_table::load_package_names(&grf);
                     self.game.data_table.sign_boards =
                         nostalre_game::data_table::load_sign_boards(&grf);
                     nostalre_game::data_table::load_install_tables(

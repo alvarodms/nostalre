@@ -75,6 +75,7 @@ use nostalre_ui_component::game::quest_window::{QuestDetailWindow, QuestWindow};
 use nostalre_ui_component::game::read_mail_window::READ_MAIL_WINDOW_ID;
 use nostalre_ui_component::game::read_mail_window::ReadMailWindow;
 use nostalre_ui_component::game::refine_window::{REFINE_WINDOW_ID, RefineWindow};
+use nostalre_ui_component::game::select_package_window::SelectPackageWindow;
 use nostalre_ui_component::game::shortcut_list_window::SHORTCUT_LIST_WINDOW_ID;
 use nostalre_ui_component::game::shortcut_list_window::ShortcutListWindow;
 use nostalre_ui_component::game::skill_talkbox_dialog::SkillTalkboxDialog;
@@ -119,6 +120,8 @@ pub struct Windows {
     pub npc_dialog: NpcDialog,
     pub warp_list_window: WarpListWindow,
     pub item_list_selection_window: ItemListSelectionWindow,
+    /// A selection box's choices (the desktop HUD; the frameless one shows them in its menu)
+    pub select_package_window: SelectPackageWindow,
     pub refine_window: RefineWindow,
     pub stylist_window: StylistWindow,
     pub make_item_window: MakeItemWindow,
@@ -195,6 +198,7 @@ impl Windows {
             npc_dialog: NpcDialog::new(),
             warp_list_window: WarpListWindow::new(),
             item_list_selection_window: ItemListSelectionWindow::new(),
+            select_package_window: SelectPackageWindow::new(),
             refine_window: RefineWindow::new(),
             stylist_window: StylistWindow::new(),
             make_item_window: MakeItemWindow::new(),

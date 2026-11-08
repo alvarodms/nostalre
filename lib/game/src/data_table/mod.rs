@@ -72,6 +72,8 @@ pub struct DataTable {
     pub titles: crate::title::TitleTables,
     /// The damage skins in id order (`load_damage_skins`); empty without the tables
     pub damage_skins: Vec<crate::damage_skin::DamageSkin>,
+    /// kRO's names for the selection boxes' choices: box item id, then the choice's number (`load_package_names`)
+    pub package_names: HashMap<u32, HashMap<u32, String>>,
 }
 
 impl DataTable {
@@ -101,6 +103,7 @@ impl DataTable {
             special_popups: HashMap::new(),
             titles: Default::default(),
             damage_skins: Vec::new(),
+            package_names: HashMap::new(),
         }
     }
 
@@ -161,6 +164,18 @@ fn add_missing_items(
     for (id, item) in extra {
         items.entry(id).or_insert(item);
     }
+}
+
+/// kRO's names for the selection boxes' choices (`selectpackageitem_cln.lub`); empty when the archive does not
+/// have them, and the choices are named after what they hold
+pub fn load_package_names(
+    grf: &nostalre_formats::grf::GrfArchive,
+) -> nostalre_formats::lua_table::PackageNames {
+    read_lub(
+        grf,
+        &[nostalre_resources::lua::SELECT_PACKAGE_ITEM_514_LUB],
+        nostalre_formats::lua_table::parse_select_package_names,
+    )
 }
 
 pub fn load_styling_shop(
