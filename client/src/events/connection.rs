@@ -379,6 +379,7 @@ impl App {
             preload_window(&mut self.windows.npc_dialog, renderer, grf);
             preload_window(&mut self.windows.warp_list_window, renderer, grf);
             preload_window(&mut self.windows.item_list_selection_window, renderer, grf);
+            preload_window(&mut self.windows.select_package_window, renderer, grf);
             preload_window(&mut self.windows.make_item_window, renderer, grf);
             preload_window(&mut self.windows.vending_shop_window, renderer, grf);
             preload_window(&mut self.windows.vending_setup_window, renderer, grf);

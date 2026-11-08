@@ -2535,6 +2535,10 @@ impl App {
                     if self.player_hidden() {
                         continue;
                     }
+                    // a selection box opens its choices; the pick is what goes to the server
+                    if self.open_select_package(index) {
+                        continue;
+                    }
                     let account_id = self
                         .game
                         .session
@@ -2545,6 +2549,46 @@ impl App {
                     self.channel.send_packet(build_use_item_packet(
                         index,
                         account_id,
+                        self.active_packetver,
+                    ));
+                }
+                GameEvent::AskUsePackageItem {
+                    index,
+                    box_id,
+                    group,
+                    name,
+                } => {
+                    let fallback = format!("You have selected {name}. Is this correct?");
+                    let message = self.game.data_table.msg_or(3975, &[&name], &fallback);
+                    self.game
+                        .arm_confirm(&mut self.windows, &message, move |yes| {
+                            yes.then_some(GameEvent::RequestUsePackageItem {
+                                index,
+                                box_id,
+                                group,
+                            })
+                        });
+                }
+                GameEvent::RequestUsePackageItem {
+                    index,
+                    box_id,
+                    group,
+                } => {
+                    if self.windows.select_package_window.open_for() == Some((index, box_id)) {
+                        self.windows.select_package_window.close();
+                    }
+                    let account_id = self
+                        .game
+                        .session
+                        .login_session
+                        .as_ref()
+                        .map(|s| s.account_id)
+                        .unwrap_or(0);
+                    self.channel.send_packet(build_use_package_item_packet(
+                        index,
+                        account_id,
+                        box_id,
+                        group,
                         self.active_packetver,
                     ));
                 }

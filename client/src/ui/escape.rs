@@ -216,6 +216,10 @@ pub fn route_escape(
         windows.item_list_selection_window.cancel(&mut events);
         return events;
     }
+    if windows.select_package_window.is_open() {
+        windows.select_package_window.close();
+        return events;
+    }
     if windows.warp_list_window.is_open() {
         windows.warp_list_window.cancel(&mut events);
         return events;
@@ -287,6 +291,7 @@ pub fn escape_would_close(windows: &mut Windows, game: &mut GameState) -> bool {
             .as_ref()
             .is_some_and(|s| !s.no_buttons)
         || windows.item_list_selection_window.is_open()
+        || windows.select_package_window.is_open()
         || windows.warp_list_window.is_open()
     {
         return true;
@@ -335,6 +340,7 @@ pub fn modal_besides_menu(windows: &mut Windows, ctx: &BuildCtx) -> bool {
     if windows.confirm_dialog.state.is_some()
         || windows.warp_list_window.is_open()
         || windows.item_list_selection_window.is_open()
+        || windows.select_package_window.is_open()
     {
         return true;
     }

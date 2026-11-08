@@ -7,6 +7,7 @@ mod frame;
 mod home;
 mod item_detail;
 mod items;
+mod package;
 mod party;
 mod quests;
 mod settings;
@@ -228,7 +229,7 @@ impl Menu {
     fn set_screen(&mut self, screen: Screen) {
         self.screen = screen;
         self.picker = None;
-        self.items.back();
+        self.items.leave();
         self.equipment.back();
         self.settings.leave();
         self.party.leave();
@@ -317,6 +318,12 @@ impl Menu {
             self.set_screen(screen);
             self.cursor = command_index(|c| c.screen() == Some(screen));
         }
+    }
+
+    /// A selection box used (from the bag or the skill bar): the menu open on Items, the box's choices up
+    pub fn choose_package(&mut self, package: nostalre_game::select_package::SelectPackage) {
+        self.open_on(HotkeyAction::ToggleInventory);
+        self.items.choose(package);
     }
 
     pub fn close(&mut self) {

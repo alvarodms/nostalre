@@ -91,6 +91,28 @@ impl Social {
                     .await?;
                 format!("used once, then message {msg_id} with {value}")
             }
+            // a selection box (@item) opened on choice GROUP with 0x0baf: the server gives that choice's first item,
+            // at the refine its item_packages.yml says, and takes the box
+            ("use-package", &[item, group]) => {
+                let choice = nostalre_game::package_tables::package_choices(item)
+                    .and_then(|c| c.iter().find(|c| c.group == group))
+                    .ok_or(format!("{item} has no choice {group} in item_packages.yml"))?;
+                let wanted = choice.items[0];
+                let index = self.get_item(zone, me, item, 1).await?;
+                let pick = sender::build_use_package_item_packet(index, self.aid, item, group, pv);
+                let refine = self
+                    .request(zone, pick, REPLY, &format!("item {}", wanted.item_id), |e| match e {
+                        GameEvent::InventoryItemPickup {
+                            item_id,
+                            refining_level,
+                            ..
+                        } if *item_id == wanted.item_id => Some(*refining_level),
+                        _ => None,
+                    })
+                    .await?;
+                ensure(refine == wanted.refine, &format!("refine +{refine}, not +{}", wanted.refine))?;
+                format!("choice {group}: item {} at +{refine}", wanted.item_id)
+            }
             ("cart", &[item]) => {
                 let cart_index = self.put_in_cart(zone, me, item).await?;
                 let back = sender::build_move_item_cart_to_body_packet(cart_index, 1, pv);

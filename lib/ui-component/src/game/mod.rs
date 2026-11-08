@@ -34,6 +34,7 @@ pub mod levelup_notification_window;
 pub mod mailbox_window;
 pub mod make_item_window;
 pub mod map_missing_window;
+pub mod select_package_window;
 pub mod mercenary_skill_window;
 pub mod mercenary_window;
 pub mod minimap_window;

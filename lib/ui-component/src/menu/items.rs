@@ -3,6 +3,7 @@ use super::ROW_BASE_ID;
 use super::bar_picker::ToBar;
 use super::frame::{self, COLUMN_GAP, Hint, Key, Keys, ROW_H, TABS_H, Textures};
 use super::item_detail::{ItemDetail, display_name, item_row};
+use super::package::Chooser;
 use crate::BuildCtx;
 use crate::game::hotkey_bar::item_fits;
 use crate::game::inventory_window::activate;
@@ -12,6 +13,7 @@ use nostalre_game::character::Character;
 use nostalre_game::event::GameEvent;
 use nostalre_game::inventory::InventoryData;
 use nostalre_game::item::{InventoryTab, Item};
+use nostalre_game::select_package::SelectPackage;
 use nostalre_ui::frame::{UiFrame, WidgetId};
 use nostalre_ui::rect::Rect;
 
@@ -31,6 +33,8 @@ pub(super) struct Items {
     detail: ItemDetail,
     /// How many of a stack to drop, while the player says
     dropping: Option<DropPrompt>,
+    /// A selection box opened: its choices take the screen until one is taken or the player backs out
+    choosing: Option<Chooser>,
 }
 
 /// The drop question: for the item at `index`, as long as it is still that item
@@ -125,12 +129,33 @@ impl Items {
         self.dropping.is_some()
     }
 
-    /// Escape out of the drop question
+    /// Escape out of the drop question, or a step back out of an open selection box
     pub fn back(&mut self) -> bool {
+        if let Some(chooser) = &mut self.choosing {
+            if !chooser.back() {
+                self.choosing = None;
+            }
+            return true;
+        }
         self.dropping.take().is_some()
     }
 
+    /// Another screen: what this one was asking goes away
+    pub fn leave(&mut self) {
+        self.dropping = None;
+        self.choosing = None;
+    }
+
+    /// A selection box opened: its choices in place of the bag
+    pub fn choose(&mut self, package: SelectPackage) {
+        self.dropping = None;
+        self.choosing = Some(Chooser::new(package));
+    }
+
     pub fn footer(&self, ctx: &BuildCtx) -> (String, Vec<Hint>) {
+        if let Some(chooser) = &self.choosing {
+            return chooser.footer(ctx);
+        }
         let c = &*ctx.character;
         if let Some((prompt, item)) = self
             .dropping
@@ -178,6 +203,13 @@ impl Items {
         to_bar: &mut Option<ToBar>,
         events: &mut Vec<GameEvent>,
     ) {
+        if let Some(chooser) = &mut self.choosing {
+            // the box used, dropped or moved meanwhile: back to the bag
+            if !chooser.still_there(ctx) || chooser.build(ui, ctx, area, keys, textures, events) {
+                self.choosing = None;
+            }
+            return;
+        }
         let asked = self.ask(ui, &ctx.character.inventory, keys, events);
         // while it asks, the keys are the question's
         let keys = &if asked { Keys::default() } else { *keys };

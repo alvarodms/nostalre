@@ -119,6 +119,8 @@ pub mod lua {
         ITEM_INFO_EN_514_LUB = "data/luafiles514/lua files/datainfo/iteminfo_en.lub";
         WEAPON_TABLE_514_LUB = "data/luafiles514/lua files/datainfo/weapontable.lub";
         STYLING_SHOP_514_LUB = "data/luafiles514/lua files/stylingshop/stylingshopinfo.lub";
+        // the selection boxes' choice names (clients from 2025; ROenglishRE's 2025-06-18 compatibility files)
+        SELECT_PACKAGE_ITEM_514_LUB = "data/luafiles514/lua files/selectpackage/selectpackageitem_cln.lub";
         SIGN_BOARD_LIST_514_LUB = "data/luafiles514/lua files/signboardlist.lub";
         // garments: the view rAthena sends names a folder of sprites per job and sex; the layer tables say which
         // frames draw it behind the body (`JOBID`, which they index by, comes from the skill tree's list)
@@ -606,6 +608,14 @@ pub mod texture {
 pub mod ui {
     crate::paths! {
         BTN_ADD = "data/texture/유저인터페이스/btn_add.bmp";
+        // the selection box window (kRO's UISelectPackageItemBox): a choice's row, unpicked and picked; a content
+        // row, plain, rental, with random options, both
+        SELECT_PACKAGE_CHOICE = "data/texture/유저인터페이스/selectpackage/btn_set_list.bmp";
+        SELECT_PACKAGE_CHOICE_PICKED = "data/texture/유저인터페이스/selectpackage/btn_set_press.bmp";
+        SELECT_PACKAGE_ITEM = "data/texture/유저인터페이스/selectpackage/item_list.bmp";
+        SELECT_PACKAGE_ITEM_TIME = "data/texture/유저인터페이스/selectpackage/item_list_time.bmp";
+        SELECT_PACKAGE_ITEM_RANDOM = "data/texture/유저인터페이스/selectpackage/item_list_ranop.bmp";
+        SELECT_PACKAGE_ITEM_TIME_RANDOM = "data/texture/유저인터페이스/selectpackage/item_list_timeran.bmp";
         SIGN_BOARD_BG = "data/texture/유저인터페이스/signboard/bg_signboard.bmp";
         SHOW_DAMAGE_BG = "data/texture/유저인터페이스/showdamage/bg_damage.bmp";
         SHOW_DAMAGE_CELL = "data/texture/유저인터페이스/showdamage/btn_damage.bmp";

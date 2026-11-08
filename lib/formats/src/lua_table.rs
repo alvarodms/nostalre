@@ -534,6 +534,70 @@ pub fn parse_styling_shop(chunk: &[u8]) -> Result<StylingShopTable, LubError> {
     Ok(StylingShopTable { lists })
 }
 
+/// Selection boxes' choice names: box item id, then the choice's number (the server's `Group`), then its name
+pub type PackageNames = HashMap<u32, HashMap<u32, String>>;
+
+/// The choices' names of kRO's selection boxes (`selectpackageitem_cln.lub`'s `SelectPackageItemData.TabNameTbl`,
+/// `[box] = { [choice] = "name" }`), from ROenglishRE's source text or kRO's compiled chunk. The file's
+/// `PackageTbl` (what each choice gives) is left out: the server's `item_packages.yml` is what counts.
+pub fn parse_select_package_names(chunk: &[u8]) -> Result<PackageNames, LubError> {
+    let mut names = PackageNames::new();
+    if !lub::is_compiled_chunk(chunk) {
+        use crate::lua_source::{LuaKey, LuaValue, globals};
+        let globals = globals(chunk);
+        let Some(LuaValue::Table(tabs)) =
+            globals
+                .get("SelectPackageItemData")
+                .and_then(|data| match data {
+                    LuaValue::Table(t) => t.get("TabNameTbl"),
+                    _ => None,
+                })
+        else {
+            return Ok(names);
+        };
+        for (key, value) in &tabs.entries {
+            let (LuaKey::Index(box_id), LuaValue::Table(choices)) = (key, value) else {
+                continue;
+            };
+            let Ok(box_id) = u32::try_from(*box_id) else {
+                continue;
+            };
+            let entry = names.entry(box_id).or_default();
+            for (key, value) in &choices.entries {
+                if let (LuaKey::Index(choice), Some(name)) = (key, value.as_str())
+                    && let Ok(choice) = u32::try_from(*choice)
+                {
+                    entry.insert(choice, name.to_string());
+                }
+            }
+        }
+        return Ok(names);
+    }
+    let id = |n: f64| (n >= 0.0 && n <= u32::MAX as f64 && n.fract() == 0.0).then_some(n as u32);
+    let mut state = LuaState::new();
+    lub::load_chunk(chunk, &mut state)?;
+    let Some(tabs) = state
+        .global_table("SelectPackageItemData")
+        .and_then(|data| data.get(&Key::Str(Rc::from(&b"TabNameTbl"[..]))))
+        .and_then(|v| state.table(v))
+    else {
+        return Ok(names);
+    };
+    for (key, value) in tabs {
+        let (Some(box_id), Some(choices)) = (key.as_number().and_then(id), state.table(value))
+        else {
+            continue;
+        };
+        let entry = names.entry(box_id).or_default();
+        for (key, value) in choices {
+            if let (Some(choice), Some(name)) = (key.as_number().and_then(id), value.as_bytes()) {
+                entry.insert(choice, decode_euc_kr(name));
+            }
+        }
+    }
+    Ok(names)
+}
+
 /// One row of kRO's `SignBoardList` (`signboardlist.lub`) as `GetSignBoardListTable` hands it to the exe (0xadefa0,
 /// format `d>sddddsss`): the fields as written, before the exe's defaults; a missing string is `None`, a missing
 /// number 0 (Lua's `tonumber` of nil)
