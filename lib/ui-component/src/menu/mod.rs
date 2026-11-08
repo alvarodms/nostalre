@@ -732,6 +732,29 @@ mod tests {
     }
 
     #[test]
+    fn a_rented_cart_is_the_last_gear_row_and_del_removes_it() {
+        let mut menu = Menu::default();
+        menu.toggle_for(HotkeyAction::ToggleEquipment);
+        let mut character = Character::new();
+        character.cart_design = Some(1);
+        // up from the first slot wraps to the last row: the cart
+        frame_on(&mut menu, &mut character, |ui| ui.key_up = true);
+        let events = frame_on(&mut menu, &mut character, |ui| ui.key_delete = true);
+        assert!(matches!(
+            events.as_slice(),
+            [GameEvent::RequestRemoveOption]
+        ));
+
+        // once it is gone the row goes, and Del on the slot left picked asks for nothing
+        character.cart_design = None;
+        assert!(frame_on(&mut menu, &mut character, |ui| ui.key_delete = true).is_empty());
+        let mut menu = Menu::default();
+        menu.toggle_for(HotkeyAction::ToggleEquipment);
+        frame_on(&mut menu, &mut character, |ui| ui.key_up = true);
+        assert!(frame_on(&mut menu, &mut character, |ui| ui.key_delete = true).is_empty());
+    }
+
+    #[test]
     fn a_drop_question_for_an_item_gone_goes_away() {
         let mut menu = Menu::default();
         menu.toggle_for(HotkeyAction::ToggleInventory);

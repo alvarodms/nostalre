@@ -36,6 +36,7 @@ const COSTUME: [(&str, EquipmentLocation); 10] = [
     ("Shadow acc. R", EquipmentLocation::ShadowAccR),
 ];
 const TABS: [&str; 3] = ["Gear", "Costume", "More"];
+const GEAR_TAB: usize = 0;
 const MORE_TAB: usize = 2;
 /// What the More tab opens: the equipment window's other pages
 const MORE: [&str; 2] = ["Titles and damage skins", "Attributes"];
@@ -70,7 +71,7 @@ pub(super) struct Equipment {
 
 fn slots(tab: usize) -> &'static [(&'static str, EquipmentLocation)] {
     match tab {
-        0 => &GEAR,
+        GEAR_TAB => &GEAR,
         1 => &COSTUME,
         _ => &[],
     }
@@ -83,6 +84,12 @@ fn fits(inv: &InventoryData, location: EquipmentLocation) -> Vec<&Item> {
         .iter()
         .filter(|i| !i.is_equipped() && i.is_identified && i.equip_location() & mask != 0)
         .collect()
+}
+
+/// The Gear tab's row after its slots while a cart is rented: removing it is the classic equipment window's
+/// right-click on the cart (`clif_parse_RemoveOption`)
+fn cart_row(tab: usize, ctx: &BuildCtx) -> Option<usize> {
+    (tab == GEAR_TAB && ctx.character.cart_design.is_some()).then_some(GEAR.len())
 }
 
 /// The request to wear `item` on that slot: the slot alone picks which of two an accessory or a second
@@ -106,6 +113,20 @@ impl Equipment {
         if self.tab == MORE_TAB {
             let hints = vec![Hint::MOVE, Hint::TABS, Hint::OPEN, Hint::BACK];
             return (MORE_HELP[self.slot.min(MORE.len() - 1)].to_string(), hints);
+        }
+        if cart_row(self.tab, ctx) == Some(self.slot) {
+            let cart = &ctx.character.cart;
+            let help = format!(
+                "Cart: {}/{} items, {}/{} weight",
+                cart.count, cart.max_count, cart.weight, cart.max_weight
+            );
+            let hints = vec![
+                Hint::MOVE,
+                Hint::TABS,
+                Hint::tap("Del", "remove", Key::Remove),
+                Hint::BACK,
+            ];
+            return (help, hints);
         }
         let inv = &ctx.character.inventory;
         let (label, location) = slots(self.tab)[self.slot.min(slots(self.tab).len() - 1)];
@@ -161,14 +182,19 @@ impl Equipment {
             return self.more(ui, area, keys, events);
         }
         let table = slots(self.tab);
+        let cart = cart_row(self.tab, ctx);
+        let rows = table.len() + usize::from(cart.is_some());
         let inv = &ctx.character.inventory;
         let names = |item: &Item| display_name(ctx.data, &ctx.character.char_names, item);
 
         if self.focus == Focus::Slots {
-            self.slot = frame::step(keys, self.slot, table.len());
+            self.slot = frame::step(keys, self.slot, rows);
         }
-        let location = table[self.slot].1;
-        let bag = fits(inv, location);
+        // the cart went while its row was picked
+        self.slot = self.slot.min(rows - 1);
+        let on_cart = cart == Some(self.slot);
+        let location = table.get(self.slot).map(|&(_, loc)| loc);
+        let bag = location.map_or_else(Vec::new, |loc| fits(inv, loc));
         let before = self.bag;
         if self.focus == Focus::Bag {
             self.bag = frame::step(keys, self.bag, bag.len());
@@ -217,11 +243,34 @@ impl Equipment {
                 remove = worn;
             }
         }
+        let mut remove_cart = false;
+        if let Some(i) = cart {
+            let rect = Rect::new(area.x, top + i as f32 * ROW_H, left_w, ROW_H);
+            let resp = frame::row(ui, WidgetId(ROW_BASE_ID + i as u32), rect, on_cart);
+            if resp.clicked() {
+                self.slot = i;
+                self.focus = Focus::Slots;
+            }
+            remove_cart = resp.double_clicked();
+            let baseline = frame::row_baseline(ui, rect);
+            let x = rect.x + frame::ROW_TEXT;
+            style::text(ui, x, baseline, "Cart", style::DIM);
+            let c = &ctx.character.cart;
+            let count = format!("{}/{} items", c.count, c.max_count);
+            style::text(ui, x + SLOT_LABEL_W, baseline, &count, style::TEXT);
+        }
         if keys.remove && self.focus == Focus::Slots {
-            remove = worn_in(location);
+            if on_cart {
+                remove_cart = true;
+            } else {
+                remove = location.and_then(worn_in);
+            }
         }
         if let Some(item) = remove {
             events.push(GameEvent::RequestUnequipItem { index: item.index });
+        }
+        if remove_cart {
+            events.push(GameEvent::RequestRemoveOption);
         }
 
         let x = area.x + left_w + COLUMN_GAP;
@@ -229,7 +278,7 @@ impl Equipment {
         let detail_h = (area.h - TABS_H) * DETAIL_SHARE;
         let detail = Rect::new(x, top, w, detail_h);
         let shown = match self.focus {
-            Focus::Slots => worn_in(location),
+            Focus::Slots => location.and_then(worn_in),
             Focus::Bag => bag.get(self.bag).copied(),
         };
         match shown {
@@ -237,6 +286,10 @@ impl Equipment {
                 let producers = &ctx.character.char_names;
                 self.detail
                     .build(ui, ctx.data, producers, item, detail, textures, events);
+            }
+            None if on_cart => {
+                let note = "Removing the cart keeps what is in it for the next one.";
+                style::text(ui, x, style::baseline(ui, top), note, style::DIM);
             }
             None => {
                 let note = format!("Nothing on {}.", table[self.slot].0.to_lowercase());
@@ -293,7 +346,7 @@ impl Equipment {
             Focus::Bag if keys.enter => wear = bag.get(self.bag).copied(),
             _ => {}
         }
-        if let Some(item) = wear {
+        if let (Some(item), Some(location)) = (wear, location) {
             events.push(equip(item, location));
             self.focus = Focus::Slots;
         }
