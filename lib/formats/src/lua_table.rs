@@ -591,7 +591,10 @@ pub fn parse_select_package_names(chunk: &[u8]) -> Result<PackageNames, LubError
         let entry = names.entry(box_id).or_default();
         for (key, value) in choices {
             if let (Some(choice), Some(name)) = (key.as_number().and_then(id), value.as_bytes()) {
-                entry.insert(choice, decode_euc_kr(name));
+                // kRO's newer patches write this table in UTF-8, older ones in EUC-KR
+                let name =
+                    std::str::from_utf8(name).map_or_else(|_| decode_euc_kr(name), str::to_owned);
+                entry.insert(choice, name);
             }
         }
     }

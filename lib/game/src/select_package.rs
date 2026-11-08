@@ -74,7 +74,7 @@ impl SelectPackage {
                     group: c.group,
                     name: names
                         .and_then(|n| n.get(&c.group))
-                        .filter(|n| !n.trim().is_empty())
+                        .filter(|n| !n.trim().is_empty() && !is_korean(n))
                         .cloned()
                         .unwrap_or_else(|| choice_name(c.items, data)),
                     items: c.items,
@@ -113,7 +113,13 @@ impl PackageItem {
     }
 }
 
-/// A choice's name when kRO's table has none: what it gives, one after the other
+/// Whether a name has Hangul in it: kRO's table untranslated, which an English client shows its own names over
+fn is_korean(name: &str) -> bool {
+    name.chars()
+        .any(|c| matches!(c, '\u{1100}'..='\u{11FF}' | '\u{3130}'..='\u{318F}' | '\u{AC00}'..='\u{D7A3}'))
+}
+
+/// A choice's name when kRO's table has none (or only a Korean one): what it gives, one after the other
 fn choice_name(items: &[PackageItem], data: &DataTable) -> String {
     items
         .iter()
@@ -154,13 +160,18 @@ mod tests {
         let mut data = DataTable::new();
         data.package_names.insert(
             METAL_WEAPON_BOX,
-            HashMap::from([(1, "+7 Metal Lance".to_string()), (2, " ".to_string())]),
+            HashMap::from([
+                (1, "+7 Metal Lance".to_string()),
+                (2, " ".to_string()),
+                (3, "+7 메탈 메이스".to_string()),
+            ]),
         );
         let package = SelectPackage::new(9, METAL_WEAPON_BOX, &data).unwrap();
         assert_eq!(package.index, 9);
         assert_eq!(package.choices[1].name, "+7 Metal Lance");
-        // a blank name or none at all: made from the item ("Item #id" without the item tables)
+        // a blank name, a Korean one or none at all: made from the item ("Item #id" without the item tables)
         assert_eq!(package.choices[2].name, "+7 Item #16023");
+        assert!(package.choices[3].name.starts_with("+7 Item #"));
         assert_eq!(package.choices[0].name, "+7 Item #21005");
         assert_eq!(SelectPackage::new(9, 501, &data), None);
     }
