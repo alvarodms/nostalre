@@ -169,7 +169,15 @@ pub struct StrPiece {
     pub turn: StrTurn,
     /// Its layers' alpha, times this (kRO's +0x3fac: a fade the code makes)
     pub alpha: f32,
+    /// The art's row put on its place: [`STR_CENTRE_Y`] for the classic STRs, [`EZ2_STR_CENTRE_Y`] for those drawn
+    /// about the art's centre, as kRO's EZ2 player does (`CEZ2STREffectEx`)
+    pub centre_y: f32,
 }
+
+/// The art's row a classic STR puts on its place: (320, 320)
+pub const STR_CENTRE_Y: f32 = 320.0;
+/// The art's row an EZ2 STR puts on its place: the centre of its 640x480 canvas, (320, 240)
+pub const EZ2_STR_CENTRE_Y: f32 = 240.0;
 
 impl StrPiece {
     /// An STR at the effect's own place, unturned, at its size and alpha
@@ -184,6 +192,7 @@ impl StrPiece {
             at: None,
             turn: StrTurn::None,
             alpha: 1.0,
+            centre_y: STR_CENTRE_Y,
         }
     }
 }

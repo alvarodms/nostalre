@@ -2006,6 +2006,7 @@ pub fn dispatch_packet(packet: &dyn Packet) -> Vec<GameEvent> {
             sub_y: p.sub_y,
             count: p.count,
             is_falling: true,
+            drop_effect: (p.showdropeffect != 0).then_some(p.dropeffectmode),
         }];
     }
     if let Some(p) = any.downcast_ref::<PacketZcReqWearEquipAckV5>() {
@@ -2374,6 +2375,7 @@ pub fn dispatch_packet(packet: &dyn Packet) -> Vec<GameEvent> {
             sub_y: p.sub_y,
             count: p.count,
             is_falling: false,
+            drop_effect: None,
         }];
     }
     if let Some(p) = any.downcast_ref::<PacketZcItemDisappear>() {
@@ -3193,6 +3195,43 @@ mod tests {
             format_skill_display_name(discount.skill, Some(&names)),
             "MC_DISCOUNT"
         );
+    }
+
+    /// A drop's pillar (0x0add) comes through when the server shows it, and an item already on the floor (0x009d)
+    /// has none
+    #[test]
+    fn floor_items_carry_their_drop_pillar() {
+        let packetver = 20250716;
+        let drop_effect = |show: u8, mode: u16| {
+            let mut pkt = PacketZcItemFallEntryV5::new(packetver);
+            pkt.itaid = 9;
+            pkt.showdropeffect = show;
+            pkt.dropeffectmode = mode;
+            match dispatch_packet(&pkt).as_slice() {
+                [
+                    GameEvent::FloorItemAppeared {
+                        id: 9,
+                        is_falling: true,
+                        drop_effect,
+                        ..
+                    },
+                ] => *drop_effect,
+                other => panic!("unexpected events: {other:?}"),
+            }
+        };
+        assert_eq!(drop_effect(1, 3), Some(3));
+        assert_eq!(drop_effect(1, 0), Some(0));
+        assert_eq!(drop_effect(0, 0), None);
+
+        let entry = PacketZcItemEntry::new(packetver);
+        assert!(matches!(
+            dispatch_packet(&entry).as_slice(),
+            [GameEvent::FloorItemAppeared {
+                drop_effect: None,
+                is_falling: false,
+                ..
+            }]
+        ));
     }
 
     #[test]

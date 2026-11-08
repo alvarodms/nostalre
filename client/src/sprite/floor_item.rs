@@ -1,5 +1,6 @@
 use crate::{App, input};
 use nostalre_game::cursor::{RenderEntry, RenderEntryKind};
+use nostalre_game::effect::effects::kro_classes::drop_pillar_effect;
 use nostalre_game::sprite_loader;
 use std::rc::Rc;
 
@@ -16,6 +17,7 @@ impl App {
         sub_y: u8,
         count: i16,
         is_falling: bool,
+        drop_effect: Option<u16>,
     ) {
         let elapsed = self.start_time.elapsed().as_secs_f32();
         let name = self.item_name_for(item_id, is_identified);
@@ -50,7 +52,16 @@ impl App {
             .as_ref()
             .map(|gat| gat.get_height(cell_x + 0.5, cell_y + 0.5))
             .unwrap_or(0.0);
+        let ground = self.cell_world_pos(cell_x + 0.5, cell_y + 0.5);
         self.game.world.floor_items.insert(id, floor_item);
+        self.despawn_drop_pillar(id);
+        if let Some(effect) = drop_effect.and_then(drop_pillar_effect)
+            && let Some(ground) = ground
+        {
+            let key = self.game.effect_keys.next_key();
+            self.effect_queue.spawn_at_keyed(effect, ground, key);
+            self.game.effect_keys.drop_pillar_keys.insert(id, key);
+        }
 
         if self.game.assets.shadow_sprite.is_none()
             && let Some(grf) = &self.grf
@@ -74,6 +85,13 @@ impl App {
                     .floor_item_sprites
                     .insert(id, (Rc::new(tex), data.act));
             }
+        }
+    }
+
+    /// Takes off the pillar over floor item `id`, if it dropped with one
+    pub(crate) fn despawn_drop_pillar(&mut self, id: u32) {
+        if let Some(key) = self.game.effect_keys.drop_pillar_keys.remove(&id) {
+            self.effect_queue.despawn(key);
         }
     }
 

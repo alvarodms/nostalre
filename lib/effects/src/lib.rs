@@ -29,9 +29,9 @@ pub use effect_queue::{
     trail_arrival_secs,
 };
 pub use effect_trait::{
-    Afterimage, BodyAction, BodyCopy, BodyTint, BodyVertical, CameraShake, CameraView, Effect,
-    EffectMessage, EffectRenderCtx, EffectUpdateCtx, GroundSampler, NumberRequest, StrPiece,
-    StrTurn, WeaponAura, WeaponAuraStyle, WeaponLight,
+    Afterimage, BodyAction, BodyCopy, BodyTint, BodyVertical, CameraShake, CameraView,
+    EZ2_STR_CENTRE_Y, Effect, EffectMessage, EffectRenderCtx, EffectUpdateCtx, GroundSampler,
+    NumberRequest, STR_CENTRE_Y, StrPiece, StrTurn, WeaponAura, WeaponAuraStyle, WeaponLight,
 };
 pub use factory::make_effect;
 pub use opt3::{

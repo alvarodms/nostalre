@@ -149,6 +149,8 @@ pub struct EffectKeys {
     /// gid -> (effect key, rank the tint was baked from)
     pub toprank_keys: HashMap<u32, (u32, i32)>,
     pub warp_portal_keys: HashMap<u32, u32>,
+    /// The pillar over each floor item that dropped with one: item id -> effect key
+    pub drop_pillar_keys: HashMap<u32, u32>,
     /// The body effect each (gid, trigger) shows: spirit spheres, shields, souls, the statuses' (`body_effect.rs`)
     pub body_effect_keys: HashMap<(u32, Trigger), u32>,
     /// A unit's spheres drawn by a kRO class of their own (`kro_spheres`): gid -> (the class, its key)
@@ -174,6 +176,7 @@ impl EffectKeys {
         self.boss_aura_keys.clear();
         self.toprank_keys.clear();
         self.warp_portal_keys.clear();
+        self.drop_pillar_keys.clear();
         self.body_effect_keys.clear();
         self.sphere_class_keys.clear();
         self.sight_aura_keys.clear();
@@ -1362,6 +1365,7 @@ mod effect_reset_tests {
         keys.boss_aura_keys.insert(1, 1);
         keys.toprank_keys.insert(1, (1, 1));
         keys.warp_portal_keys.insert(1, 1);
+        keys.drop_pillar_keys.insert(1, 1);
         keys.body_effect_keys.insert(
             (1, Trigger::Counter(crate::body_effect::Counter::Spirits)),
             1,
@@ -1387,6 +1391,7 @@ mod effect_reset_tests {
         assert!(keys.boss_aura_keys.is_empty());
         assert!(keys.toprank_keys.is_empty());
         assert!(keys.warp_portal_keys.is_empty());
+        assert!(keys.drop_pillar_keys.is_empty());
         assert!(keys.body_effect_keys.is_empty());
         assert!(keys.sight_aura_keys.is_empty());
         assert!(keys.ruwach_aura_keys.is_empty());

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use nostalre_effects::StrTurn;
+use nostalre_effects::{STR_CENTRE_Y, StrTurn};
 use nostalre_formats::grf::GrfArchive;
 use nostalre_formats::str_effect::{EffectLayer, StrEffectFile};
 
@@ -392,6 +392,8 @@ pub struct StrEmitterInput<'a> {
     pub turn: StrTurn,
     /// Every layer's alpha times this (kRO's +0x3fac)
     pub alpha: f32,
+    /// The art's row put on `position`: 320 for a classic STR, 240 for an EZ2 one
+    pub centre_y: f32,
 }
 
 impl<'a> StrEmitterInput<'a> {
@@ -406,6 +408,7 @@ impl<'a> StrEmitterInput<'a> {
             repeat,
             turn: StrTurn::None,
             alpha: 1.0,
+            centre_y: STR_CENTRE_Y,
         }
     }
 }
@@ -425,6 +428,12 @@ fn turn_degrees(
             .screen_facing_in(view_projection, from, point)
             .map_or(0.0, |facing| (90.0 - facing + plus).rem_euclid(360.0)),
     }
+}
+
+/// Where a layer sits from the STR's place on screen, in pixels: its keyframe position less the art's point put on
+/// the place (x 320; y `centre_y`), `scale` screen pixels to an STR pixel
+fn layer_offset(offset: [f32; 2], centre_y: f32, scale: f32) -> [f32; 2] {
+    [(offset[0] - 320.0) * scale, (offset[1] - centre_y) * scale]
 }
 
 /// The camera's right, down and away axes in the world, for offsets given in view space
@@ -523,8 +532,7 @@ pub fn build_str_effect_batches<'a>(
             let sin_a = angle_rad.sin();
 
             let scale = ppu * zoom / 75.0 * input.scale;
-            let offset_x = (anim.offset[0] - 320.0) * scale;
-            let offset_y = (anim.offset[1] - 320.0) * scale;
+            let [offset_x, offset_y] = layer_offset(anim.offset, input.centre_y, scale);
 
             let xy = &anim.positions;
             let corners = [
@@ -570,8 +578,8 @@ mod tests {
     use nostalre_formats::str_effect::{EffectFrame, EffectLayer};
 
     use super::{
-        Camera, StrTurn, calculate_layer_anim, layer_blend, layer_quad_color, str_angle_to_radians,
-        turn_degrees,
+        Camera, StrTurn, calculate_layer_anim, layer_blend, layer_offset, layer_quad_color,
+        str_angle_to_radians, turn_degrees,
     };
 
     #[test]
@@ -677,6 +685,26 @@ mod tests {
         let blend = layer_blend(anim.blend_src, anim.blend_dst);
         assert!(!blend.additive);
         assert!((layer_quad_color(&anim, &blend).unwrap()[3] - 128.0 / 255.0).abs() < 1e-6);
+    }
+
+    /// A classic STR puts its art's (320, 320) on its place, an EZ2 one its canvas's centre (320, 240): the drop
+    /// pillar's glow, at (320, 240), lies on the item, not 80 STR pixels up the screen
+    #[test]
+    fn a_layer_sits_off_the_art_point_its_str_puts_on_the_place() {
+        use nostalre_effects::{EZ2_STR_CENTRE_Y, STR_CENTRE_Y};
+        assert_eq!(layer_offset([320.0, 320.0], STR_CENTRE_Y, 2.0), [0.0, 0.0]);
+        assert_eq!(
+            layer_offset([320.0, 240.0], EZ2_STR_CENTRE_Y, 2.0),
+            [0.0, 0.0]
+        );
+        assert_eq!(
+            layer_offset([320.0, 240.0], STR_CENTRE_Y, 2.0),
+            [0.0, -160.0]
+        );
+        assert_eq!(
+            layer_offset([308.0, 30.0], EZ2_STR_CENTRE_Y, 0.5),
+            [-6.0, -105.0]
+        );
     }
 
     #[test]

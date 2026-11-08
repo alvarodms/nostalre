@@ -95,6 +95,8 @@ pub struct StrSnapshot<'a> {
     pub layer: StrLayer,
     pub turn: nostalre_effects::StrTurn,
     pub alpha: f32,
+    /// The art's row put on `position` ([`nostalre_effects::StrPiece::centre_y`])
+    pub centre_y: f32,
 }
 
 impl StrSnapshot<'_> {
@@ -108,6 +110,7 @@ impl StrSnapshot<'_> {
             repeat: self.repeat,
             turn: self.turn,
             alpha: self.alpha,
+            centre_y: self.centre_y,
         }
     }
 }
@@ -1069,6 +1072,7 @@ impl EffectHolder {
                     layer: str_layer(e.effect_id),
                     turn: nostalre_effects::StrTurn::None,
                     alpha: 1.0,
+                    centre_y: nostalre_effects::STR_CENTRE_Y,
                 });
             }
             out.extend(pieces.drain(..).map(|p| StrSnapshot {
@@ -1085,6 +1089,7 @@ impl EffectHolder {
                 },
                 turn: p.turn,
                 alpha: p.alpha,
+                centre_y: p.centre_y,
             }));
         }
         out

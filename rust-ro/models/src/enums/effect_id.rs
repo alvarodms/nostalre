@@ -4570,6 +4570,18 @@ pub enum EffectId {
     #[value_string = "EF_KRO_1142"]
     #[value = 1142]
     Kro1142,
+    /// `EF_KRO_1186`
+    #[value_string = "EF_KRO_1186"]
+    #[value = 1186]
+    Kro1186,
+    /// `EF_KRO_1189`
+    #[value_string = "EF_KRO_1189"]
+    #[value = 1189]
+    Kro1189,
+    /// `EF_KRO_1190`
+    #[value_string = "EF_KRO_1190"]
+    #[value = 1190]
+    Kro1190,
     /// `EF_KRO_1228`
     #[value_string = "EF_KRO_1228"]
     #[value = 1228]
@@ -6018,6 +6030,18 @@ pub enum EffectId {
     #[value_string = "EF_KRO_1868"]
     #[value = 1868]
     Kro1868,
+    /// `EF_KRO_1869`
+    #[value_string = "EF_KRO_1869"]
+    #[value = 1869]
+    Kro1869,
+    /// `EF_KRO_1870`
+    #[value_string = "EF_KRO_1870"]
+    #[value = 1870]
+    Kro1870,
+    /// `EF_KRO_1871`
+    #[value_string = "EF_KRO_1871"]
+    #[value = 1871]
+    Kro1871,
     /// `EF_KRO_1872`
     #[value_string = "EF_KRO_1872"]
     #[value = 1872]
@@ -7965,7 +7989,7 @@ pub enum EffectId {
 }
 
 impl EffectId {
-    pub const ALL: [EffectId; 1989] = [
+    pub const ALL: [EffectId; 1995] = [
         Self::Hit1,
         Self::Hit2,
         Self::Hit3,
@@ -9107,6 +9131,9 @@ impl EffectId {
         Self::Kro1135,
         Self::Kro1141,
         Self::Kro1142,
+        Self::Kro1186,
+        Self::Kro1189,
+        Self::Kro1190,
         Self::Kro1228,
         Self::Kro1232,
         Self::Kro1235,
@@ -9469,6 +9496,9 @@ impl EffectId {
         Self::Kro1865,
         Self::Kro1866,
         Self::Kro1868,
+        Self::Kro1869,
+        Self::Kro1870,
+        Self::Kro1871,
         Self::Kro1872,
         Self::Kro1873,
         Self::Kro1874,

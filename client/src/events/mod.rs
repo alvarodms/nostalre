@@ -1121,6 +1121,7 @@ impl App {
                     sub_y,
                     count,
                     is_falling,
+                    drop_effect,
                 } => {
                     self.handle_floor_item_appeared(
                         id,
@@ -1132,11 +1133,13 @@ impl App {
                         sub_y,
                         count,
                         is_falling,
+                        drop_effect,
                     );
                 }
                 GameEvent::FloorItemDisappeared { id } => {
                     self.game.world.floor_items.remove(&id);
                     self.game.assets.floor_item_sprites.remove(&id);
+                    self.despawn_drop_pillar(id);
                 }
 
                 GameEvent::ChatMessage { gid, message } => {

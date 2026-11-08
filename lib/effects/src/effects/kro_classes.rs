@@ -23,7 +23,9 @@ use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
 use models::enums::effect_id::EffectId;
 
 use crate::draw::{BlendKind, EffectDrawList, EffectPrimitiveDraw, EffectStatus};
-use crate::effect_trait::{Effect, EffectRenderCtx, EffectUpdateCtx, StrPiece, StrTurn};
+use crate::effect_trait::{
+    EZ2_STR_CENTRE_Y, Effect, EffectRenderCtx, EffectUpdateCtx, StrPiece, StrTurn,
+};
 use crate::vec3::{add, length, scale, sub, unit};
 
 const UPDATES_PER_SECOND: f32 = 60.0;
@@ -155,6 +157,86 @@ impl Effect for Follow {
     fn ends_with_its_strs(&self) -> bool {
         true
     }
+}
+
+/// The pillar of light over an item that drops with an effect (0x0add's `showdropeffect`): its beam and the glow on
+/// the ground under it, both playing round at the item's place until the item goes (taken off by key), and its
+/// sound once, as it shows. The files and the sound are kRO's `new_dropitem` set, played as roBrowser plays them
+struct DropPillar {
+    beam: &'static str,
+    bottom: &'static str,
+    sound: Option<&'static str>,
+    steps: Steps,
+}
+
+impl Effect for DropPillar {
+    fn update(&mut self, ctx: &EffectUpdateCtx) -> EffectStatus {
+        self.steps.advance(ctx.delta);
+        EffectStatus::Running
+    }
+
+    fn collect_draws(&self, _out: &mut EffectDrawList, _ctx: &EffectRenderCtx) {}
+
+    fn str_pieces(&self, out: &mut Vec<StrPiece>) {
+        // The new_dropitem files are drawn about their canvas's centre (320, 240), not the classic (320, 320): put
+        // the classic row on the item and the glow sits 80 STR pixels up the screen, two cells off the item
+        out.push(StrPiece {
+            under_sprites: true,
+            centre_y: EZ2_STR_CENTRE_Y,
+            ..StrPiece::new(self.bottom, self.steps.secs(), true)
+        });
+        out.push(StrPiece {
+            centre_y: EZ2_STR_CENTRE_Y,
+            ..StrPiece::new(self.beam, self.steps.secs(), true)
+        });
+    }
+
+    fn take_sfx_request(&mut self) -> Option<&'static str> {
+        self.sound.take()
+    }
+}
+
+macro_rules! drop_pillar {
+    ($colour:literal) => {
+        || -> Box<dyn Effect> {
+            Box::new(DropPillar {
+                beam: concat!(
+                    "new_dropitem/dropitem_",
+                    $colour,
+                    "/dropitem_",
+                    $colour,
+                    "/dropitem_",
+                    $colour
+                ),
+                bottom: concat!(
+                    "new_dropitem/dropitem_",
+                    $colour,
+                    "/dropitem_",
+                    $colour,
+                    "_bottom/dropitem_",
+                    $colour,
+                    "_bottom"
+                ),
+                sound: Some(concat!("effect\\drop_", $colour, ".wav")),
+                steps: Steps::default(),
+            })
+        }
+    };
+}
+
+/// The pillar kRO shows for 0x0add's `dropeffectmode` (rAthena's `e_item_drop_effect` less one, from 2020-03-04:
+/// the client's own, blue, yellow, purple, green, red), or none. The client's own is the item's (`ItemInfo`); as
+/// roBrowser, it is pink, the cards'
+pub fn drop_pillar_effect(mode: u16) -> Option<EffectId> {
+    Some(match mode {
+        0 => EffectId::Kro1186,
+        1 => EffectId::Kro1869,
+        2 => EffectId::Kro1189,
+        3 => EffectId::Kro1190,
+        4 => EffectId::Kro1870,
+        5 => EffectId::Kro1871,
+        _ => return None,
+    })
 }
 
 /// The arrow or ball flown in a straight line from the caster to the target (`CTriangleShotArrow` 0x95f3c0,
@@ -1333,6 +1415,36 @@ const CLASSES: &[Class] = &[
         needs_target: true,
         make: || acidified(&ACID_GROUND),
     },
+    Class {
+        id: E::Kro1186,
+        needs_target: false,
+        make: drop_pillar!("pink"),
+    },
+    Class {
+        id: E::Kro1869,
+        needs_target: false,
+        make: drop_pillar!("blue"),
+    },
+    Class {
+        id: E::Kro1189,
+        needs_target: false,
+        make: drop_pillar!("yellow"),
+    },
+    Class {
+        id: E::Kro1190,
+        needs_target: false,
+        make: drop_pillar!("purple"),
+    },
+    Class {
+        id: E::Kro1870,
+        needs_target: false,
+        make: drop_pillar!("green"),
+    },
+    Class {
+        id: E::Kro1871,
+        needs_target: false,
+        make: drop_pillar!("red"),
+    },
 ];
 
 fn class(id: EffectId) -> Option<&'static Class> {
@@ -1404,6 +1516,39 @@ mod tests {
                 "{id:?} has a look of ours"
             );
         }
+    }
+
+    /// Each of 0x0add's modes is a pillar of its own: its beam over a glow under the sprites, playing round, and its
+    /// sound once
+    #[test]
+    fn a_drop_pillar_plays_round_until_taken_off() {
+        let colours = ["pink", "blue", "yellow", "purple", "green", "red"];
+        for (mode, colour) in colours.into_iter().enumerate() {
+            let id = drop_pillar_effect(mode as u16).unwrap();
+            let mut pillar = make(id, [1.0, 2.0, 3.0]).unwrap();
+            for _ in 0..1000 {
+                assert_eq!(pillar.update(&ctx(0.1)), EffectStatus::Running);
+            }
+            let [bottom, beam] = pieces(pillar.as_ref()).try_into().ok().unwrap();
+            assert_eq!(
+                beam.file,
+                format!("new_dropitem/dropitem_{colour}/dropitem_{colour}/dropitem_{colour}")
+            );
+            assert_eq!(
+                bottom.file,
+                format!(
+                    "new_dropitem/dropitem_{colour}/dropitem_{colour}_bottom/dropitem_{colour}_bottom"
+                )
+            );
+            assert!(beam.repeat && bottom.repeat && bottom.under_sprites && !beam.under_sprites);
+            // drawn about their canvas's centre, so the glow's centre is on the item
+            assert_eq!(beam.centre_y, EZ2_STR_CENTRE_Y);
+            assert_eq!(bottom.centre_y, EZ2_STR_CENTRE_Y);
+            let sound = format!("effect\\drop_{colour}.wav");
+            assert_eq!(pillar.take_sfx_request(), Some(sound.as_str()));
+            assert_eq!(pillar.take_sfx_request(), None);
+        }
+        assert_eq!(drop_pillar_effect(6), None);
     }
 
     #[test]
