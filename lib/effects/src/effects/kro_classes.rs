@@ -23,7 +23,9 @@ use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
 use models::enums::effect_id::EffectId;
 
 use crate::draw::{BlendKind, EffectDrawList, EffectPrimitiveDraw, EffectStatus};
-use crate::effect_trait::{Effect, EffectRenderCtx, EffectUpdateCtx, StrPiece, StrTurn};
+use crate::effect_trait::{
+    EZ2_STR_CENTRE_Y, Effect, EffectRenderCtx, EffectUpdateCtx, StrPiece, StrTurn,
+};
 use crate::vec3::{add, length, scale, sub, unit};
 
 const UPDATES_PER_SECOND: f32 = 60.0;
@@ -176,11 +178,17 @@ impl Effect for DropPillar {
     fn collect_draws(&self, _out: &mut EffectDrawList, _ctx: &EffectRenderCtx) {}
 
     fn str_pieces(&self, out: &mut Vec<StrPiece>) {
+        // The new_dropitem files are drawn about their canvas's centre (320, 240), not the classic (320, 320): put
+        // the classic row on the item and the glow sits 80 STR pixels up the screen, two cells off the item
         out.push(StrPiece {
             under_sprites: true,
+            centre_y: EZ2_STR_CENTRE_Y,
             ..StrPiece::new(self.bottom, self.steps.secs(), true)
         });
-        out.push(StrPiece::new(self.beam, self.steps.secs(), true));
+        out.push(StrPiece {
+            centre_y: EZ2_STR_CENTRE_Y,
+            ..StrPiece::new(self.beam, self.steps.secs(), true)
+        });
     }
 
     fn take_sfx_request(&mut self) -> Option<&'static str> {
@@ -1533,6 +1541,9 @@ mod tests {
                 )
             );
             assert!(beam.repeat && bottom.repeat && bottom.under_sprites && !beam.under_sprites);
+            // drawn about their canvas's centre, so the glow's centre is on the item
+            assert_eq!(beam.centre_y, EZ2_STR_CENTRE_Y);
+            assert_eq!(bottom.centre_y, EZ2_STR_CENTRE_Y);
             let sound = format!("effect\\drop_{colour}.wav");
             assert_eq!(pillar.take_sfx_request(), Some(sound.as_str()));
             assert_eq!(pillar.take_sfx_request(), None);
