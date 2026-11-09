@@ -515,6 +515,11 @@ impl<'a> UiFrame<'a> {
         std::mem::take(&mut self.ctx.scroll_delta)
     }
 
+    /// Claims the rows the controller's right stick scrolled this frame (see `UiContext::pad_scroll`)
+    pub fn take_pad_scroll(&mut self) -> i32 {
+        std::mem::take(&mut self.ctx.pad_scroll)
+    }
+
     fn pointer_blocked_by_popup(&self) -> bool {
         if self.in_popup_layer {
             return false;

@@ -94,6 +94,9 @@ pub struct UiContext {
     pub lock_account_windows: bool,
     /// The last key came from a controller: hints name its buttons (A, B, L1...) instead of the keyboard's
     pub pad_labels: bool,
+    /// Rows the controller's right stick scrolls this frame while the menu is open, down positive: the menu's
+    /// text that scrolls takes them (`UiFrame::take_pad_scroll`)
+    pub pad_scroll: i32,
     /// What those hints call each button
     pub pad_caps: PadCaps,
     /// The fingers on the screen
@@ -145,6 +148,7 @@ impl UiContext {
             dpi_scale: 1.0,
             lock_account_windows: false,
             pad_labels: false,
+            pad_scroll: 0,
             pad_caps: PadCaps::default(),
             fingers: Vec::new(),
         }

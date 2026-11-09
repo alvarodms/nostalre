@@ -45,6 +45,8 @@ const DEADZONE: f32 = 0.1;
 /// Cursor speed at full tilt, logical pixels per second: four times roBrowser's (joySense 25), for a handheld's
 /// screen at 150%
 const CURSOR_SPEED: f32 = 1000.0;
+/// The right stick in the menu at full tilt: rows of text scrolled a second
+const SCROLL_ROWS_PER_SEC: f32 = 12.0;
 /// Cells ahead the walk aims at full tilt; a partial tilt aims shorter.
 const WALK_REACH: f32 = 3.0;
 /// A walk request is repeated at least this often while the stick is held (the server walks one cell each
@@ -227,6 +229,8 @@ pub(crate) struct Gamepad {
     last_frame: Option<Instant>,
     /// The pad drives the cursor from here (logical px), seeded from the mouse position.
     cursor: Option<(f32, f32)>,
+    /// The part of a row the right stick has scrolled the menu's text by, not handed over yet
+    scroll_carry: f32,
     /// Pressed while the menu was open: the menu's keys, so their release is not a click.
     menu_presses: HashSet<Button>,
     /// A hotbar press from the pad may have armed a skill: aim it with the right stick once it waits
@@ -480,6 +484,19 @@ impl Gamepad {
         } else {
             0.0
         }
+    }
+
+    /// Whole rows the right stick's `y` scrolls the menu's text by over `dt`, by the tilt squared like the
+    /// cursor; what is left of a row is kept for the next frame
+    fn menu_scroll(&mut self, y: f32, dt: f32) -> i32 {
+        if y == 0.0 {
+            self.scroll_carry = 0.0;
+            return 0;
+        }
+        self.scroll_carry += y * y.abs() * SCROLL_ROWS_PER_SEC * dt;
+        let rows = self.scroll_carry.trunc();
+        self.scroll_carry -= rows;
+        rows as i32
     }
 
     /// R2 minus L2, a light press counting less (squared): -1 to 1
@@ -1027,9 +1044,17 @@ impl App {
     }
 
     /// Right stick: the cursor, as if the mouse moved (the UI and the world both see it). Frozen in aim mode,
-    /// and while Select is held alone (the stick is the wheel's).
+    /// and while Select is held alone (the stick is the wheel's). In the menu, which the D-pad and buttons
+    /// drive, it scrolls the text shown instead (an item's description, a quest's, a skill's).
     fn gamepad_cursor(&mut self, event_loop: &ActiveEventLoop, window: WindowId, dt: f32) {
         let (x, y) = self.gamepad.stick(axis::Z, axis::RZ);
+        if self.windows.menu.is_open() {
+            self.gamepad.cursor = None;
+            let rows = self.gamepad.menu_scroll(y, dt);
+            self.with_ui(|ui| ui.pad_scroll = rows);
+            return;
+        }
+        self.gamepad.scroll_carry = 0.0;
         let wheel = self.gamepad.wheel.is_some() || self.gamepad.select_alone.is_some();
         if (x == 0.0 && y == 0.0) || self.gamepad.aim.is_some() || wheel {
             self.gamepad.cursor = None;
@@ -1254,6 +1279,19 @@ mod tests {
         pad.press(Button::L2);
         pad.fresh.clear();
         assert_eq!(pad.group(), None);
+    }
+
+    #[test]
+    fn the_right_stick_scrolls_the_menu_by_whole_rows() {
+        let mut pad = Gamepad::default();
+        // full tilt down: 12 rows a second, a part of a row kept for the next frame
+        assert_eq!(pad.menu_scroll(1.0, 0.05), 0);
+        assert_eq!(pad.menu_scroll(1.0, 0.05), 1);
+        assert_eq!(pad.menu_scroll(-1.0, 0.25), -2);
+        // letting go drops what was left; half a tilt goes a quarter as fast
+        assert_eq!(pad.menu_scroll(0.0, 0.1), 0);
+        assert_eq!(pad.scroll_carry, 0.0);
+        assert_eq!(pad.menu_scroll(0.5, 1.0), 3);
     }
 
     #[test]

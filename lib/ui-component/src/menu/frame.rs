@@ -434,7 +434,8 @@ pub(super) fn wheel_step(ui: &mut UiFrame, area: Rect) -> isize {
     }
 }
 
-/// A block of wrapped text the wheel scrolls; wrapped once per text (`key`) and width, not every frame
+/// A block of wrapped text the wheel or the controller's right stick scrolls; wrapped once per text (`key`) and
+/// width, not every frame
 #[derive(Default)]
 pub(super) struct ScrolledText {
     key: Option<(u64, u32)>,
@@ -455,7 +456,8 @@ impl ScrolledText {
         let line = style::line(ui);
         let visible = (area.h / line).floor().max(0.0) as usize;
         let max = self.rows.len().saturating_sub(visible);
-        let moved = self.offset as isize + wheel_step(ui, area);
+        let pad = ui.take_pad_scroll() as isize;
+        let moved = self.offset as isize + wheel_step(ui, area) + pad;
         self.offset = (moved.max(0) as usize).min(max);
         let more = self.offset < max;
         for (i, row) in self.rows.iter().skip(self.offset).take(visible).enumerate() {
