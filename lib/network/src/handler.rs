@@ -1786,6 +1786,25 @@ pub fn dispatch_packet(packet: &dyn Packet) -> Vec<GameEvent> {
     if let Some(p) = any.downcast_ref::<PacketZcAckEquipswitch>() {
         return vec![GameEvent::EquipSwitchAnswered { failed: p.failed }];
     }
+    // the upgrade window: the package's id is 32 bits from packet version 20181121 (the parser fills one field)
+    if let Some(p) = any.downcast_ref::<PacketZcRandomUpgradeItemUiOpen>() {
+        let package_id = if p.item_id_32 != 0 {
+            p.item_id_32
+        } else {
+            u32::from(p.item_id)
+        };
+        return vec![GameEvent::UpgradeWindowOpened { package_id }];
+    }
+    if let Some(p) = any.downcast_ref::<PacketZcChangeItemOption>() {
+        return vec![GameEvent::ItemPreviewed {
+            index: p.index as u16,
+        }];
+    }
+    if let Some(p) = any.downcast_ref::<PacketZcAckRandomUpgradeItem>() {
+        return vec![GameEvent::UpgradeAnswered {
+            failed: p.result != 0,
+        }];
+    }
     // Systems with no window here yet (the plan's Open list): the achievement window (an entry's update 0x0a24, a
     // claim's answer 0x0a26: kRO's client takes no title from either under rAthena, whose claimed titles come back
     // in the full list 0x0a23) and reputation. Parsed, so their layout is checked, then dropped.

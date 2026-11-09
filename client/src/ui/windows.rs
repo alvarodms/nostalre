@@ -94,6 +94,7 @@ use nostalre_ui_component::game::stylist_window::{STYLIST_WINDOW_ID, StylistWind
 use nostalre_ui_component::game::system_menu::SystemMenu;
 use nostalre_ui_component::game::trade_window::TRADE_WINDOW_ID;
 use nostalre_ui_component::game::trade_window::TradeWindow;
+use nostalre_ui_component::game::upgrade_window::{UPGRADE_WINDOW_ID, UpgradeWindow};
 use nostalre_ui_component::game::vending_setup_window::VendingSetupWindow;
 use nostalre_ui_component::game::vending_setup_window::{
     VENDING_AVAILABLE_WINDOW_ID, VENDING_SETUP_WINDOW_ID,
@@ -122,6 +123,8 @@ pub struct Windows {
     pub item_list_selection_window: ItemListSelectionWindow,
     /// A selection box's choices (the desktop HUD; the frameless one shows them in its menu)
     pub select_package_window: SelectPackageWindow,
+    /// An upgrade package's window (the desktop HUD; the frameless one shows it in its menu)
+    pub upgrade_window: UpgradeWindow,
     pub refine_window: RefineWindow,
     pub stylist_window: StylistWindow,
     pub make_item_window: MakeItemWindow,
@@ -199,6 +202,7 @@ impl Windows {
             warp_list_window: WarpListWindow::new(),
             item_list_selection_window: ItemListSelectionWindow::new(),
             select_package_window: SelectPackageWindow::new(),
+            upgrade_window: UpgradeWindow::new(),
             refine_window: RefineWindow::new(),
             stylist_window: StylistWindow::new(),
             make_item_window: MakeItemWindow::new(),
@@ -290,6 +294,10 @@ pub(crate) const REGISTRY: &[(WidgetId, Dispatch)] = &[
     (
         REFINE_WINDOW_ID,
         Dispatch::Trait(|w| &mut w.refine_window as &mut dyn InGameWindow),
+    ),
+    (
+        UPGRADE_WINDOW_ID,
+        Dispatch::Trait(|w| &mut w.upgrade_window as &mut dyn InGameWindow),
     ),
     (
         STYLIST_WINDOW_ID,

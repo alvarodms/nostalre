@@ -216456,6 +216456,989 @@ impl Packet for PacketCzReqEquipswitchSingle {
     }
 }
 
+impl PacketZcRandomUpgradeItemUiOpen {
+    pub fn packet_id(packetver: u32) -> &'static str {
+        "0xb40a"
+    }
+    pub fn from(buffer: &[u8], packetver: u32) -> PacketZcRandomUpgradeItemUiOpen {
+        let mut offset: usize = 0;
+        PacketZcRandomUpgradeItemUiOpen {
+            packet_id: {
+                let field = i16::from_le_bytes([buffer[offset], buffer[offset + 1]]);
+                field
+            },
+            packet_id_raw: {
+                let mut dst: [u8; 2] = [0u8; 2];
+                dst.clone_from_slice(&buffer[offset..offset + 2]);
+                offset += 2;
+                dst
+            },
+            item_id: {
+                let field = if packetver < 20181121 {
+                   u16::from_le_bytes([buffer[offset], buffer[offset + 1]])
+                } else {
+                   0 as u16
+                };
+                field
+            },
+            item_id_raw: {
+                let mut dst: [u8; 2] = [0u8; 2];
+                if packetver < 20181121 {
+                    dst.clone_from_slice(&buffer[offset..offset + 2]);
+                    offset += 2;
+                }
+                dst
+            },
+            item_id_32: {
+                let field = if packetver >= 20181121 {
+                   u32::from_le_bytes([buffer[offset], buffer[offset + 1], buffer[offset + 2], buffer[offset + 3]])
+                } else {
+                   0 as u32
+                };
+                field
+            },
+            item_id_32_raw: {
+                let mut dst: [u8; 4] = [0u8; 4];
+                if packetver >= 20181121 {
+                    dst.clone_from_slice(&buffer[offset..offset + 4]);
+                    offset += 4;
+                }
+                dst
+            },
+            raw: (&buffer[..offset]).to_vec(),
+        }
+    }
+    pub fn base_len(packetver: u32) -> usize {
+        let mut base_len: usize = 2;
+        if packetver < 20181121 {
+            base_len += 2;
+        }
+        if packetver >= 20181121 {
+            base_len += 4;
+        }
+        base_len
+    }
+    pub fn layout(packetver: u32) -> Vec<(String, usize, usize)> {
+        let mut fields: Vec<(String, usize, usize)> = Vec::new();
+        #[allow(unused_mut, unused_variables)]
+        let mut offset: usize = 0;
+        fields.push(("packet_id".to_string(), offset, 2));
+        offset += 2;
+        if packetver < 20181121 {
+            fields.push(("item_id".to_string(), offset, 2));
+            offset += 2;
+        }
+        if packetver >= 20181121 {
+            fields.push(("item_id_32".to_string(), offset, 4));
+            offset += 4;
+        }
+        fields
+    }
+    pub fn set_packet_id(&mut self, value: i16) {
+        self.packet_id = value;
+    }
+    pub fn set_packet_id_raw(&mut self, value: [u8; 2]) {
+        self.packet_id_raw = value;
+    }
+    pub fn set_item_id(&mut self, value: u16) {
+        self.item_id = value;
+    }
+    pub fn set_item_id_raw(&mut self, value: [u8; 2]) {
+        self.item_id_raw = value;
+    }
+    pub fn set_item_id_32(&mut self, value: u32) {
+        self.item_id_32 = value;
+    }
+    pub fn set_item_id_32_raw(&mut self, value: [u8; 4]) {
+        self.item_id_32_raw = value;
+    }
+    pub fn new(packetver: u32) -> PacketZcRandomUpgradeItemUiOpen {
+        let packet_id = i16::from_le_bytes([0xb4, 0x0a]);
+        let packet_id_raw = [0xb4, 0x0a];
+        PacketZcRandomUpgradeItemUiOpen {
+        raw: vec![],
+        packet_id,
+        packet_id_raw,
+        item_id: 0,
+        item_id_raw: [0; 2],
+        item_id_32: 0,
+        item_id_32_raw: [0; 4],
+        }
+    }
+    #[allow(unused_mut)]
+    pub fn from_json(entries: Vec<json_flat_parser::FlatJsonValue<&str>>, packetver: u32) -> Result<Self, String> {
+        let mut packet = PacketZcRandomUpgradeItemUiOpen::new(packetver);
+        if let Some(entry) = entries.iter().find(|entry| entry.pointer.pointer.eq("/item_id")) {
+            if let Some(value) = entry.value {
+                packet.set_item_id(value.parse().map_err(|_| format!("Invalid value {} for item_id", value))?);
+            }
+        }
+        if let Some(entry) = entries.iter().find(|entry| entry.pointer.pointer.eq("/item_id_32")) {
+            if let Some(value) = entry.value {
+                packet.set_item_id_32(value.parse().map_err(|_| format!("Invalid value {} for item_id_32", value))?);
+            }
+        }
+        Ok(packet)
+    }
+}
+
+impl Packet for PacketZcRandomUpgradeItemUiOpen {
+    fn id(&self, packetver: u32) -> &str {
+       PacketZcRandomUpgradeItemUiOpen::packet_id(packetver)
+    }
+    fn name(&self) -> &str {
+       "PacketZcRandomUpgradeItemUiOpen"
+    }
+    fn debug(&self) {
+            println!("{:?}", self)
+    }
+    fn display(&self) {
+            println!("{}", self)
+    }
+    fn pretty_debug(&self) {
+            println!("{:#?}", self)
+    }
+    fn raw(&self) -> &Vec<u8> {
+            &self.raw
+    }
+    fn raw_mut(&mut self) -> &mut Vec<u8> {
+            &mut self.raw
+    }
+    fn as_any(&self) -> &dyn Any{
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any{
+        self
+    }
+    fn base_len(&self, packetver: u32) -> usize {
+        Self::base_len(packetver)
+    }
+    fn layout(&self, packetver: u32) -> Vec<(String, usize, usize)> {
+        Self::layout(packetver)
+    }
+    fn to_json(&self, packetver: u32) -> String {
+        let mut json = String::from("{\n");
+        json.push_str(format!("\"packet_id\": {},\n",format!("\"{}\"", self.id(packetver))).as_str());
+        json.push_str(format!("\"item_id\": {},\n",self.item_id.to_string()).as_str());
+        json.push_str(format!("\"item_id_32\": {},\n",self.item_id_32.to_string()).as_str());
+        json.pop();
+        json.pop();
+        json.push_str("\n}");
+        json
+    }
+    fn fill_raw(&mut self) {
+      self.fill_raw_with_packetver(None)
+    }
+    fn fill_raw_with_packetver(&mut self, packetver: Option<u32>) {
+    let mut wtr;
+        wtr = vec![];
+        wtr.write_i16::<LittleEndian>(self.packet_id).unwrap();
+        self.packet_id_raw = wtr.try_into().unwrap();
+        wtr = vec![];
+        wtr.write_u16::<LittleEndian>(self.item_id).unwrap();
+        self.item_id_raw = wtr.try_into().unwrap();
+        wtr = vec![];
+        wtr.write_u32::<LittleEndian>(self.item_id_32).unwrap();
+        self.item_id_32_raw = wtr.try_into().unwrap();
+
+        wtr = vec![];
+        wtr.append(&mut self.packet_id_raw.to_vec());
+        if packetver.is_none() {
+          wtr.append(&mut self.item_id_raw.to_vec());
+        } else if packetver.unwrap() < 20181121 {
+            wtr.append(&mut self.item_id_raw.to_vec());
+        }
+        if packetver.is_none() {
+          wtr.append(&mut self.item_id_32_raw.to_vec());
+        } else if packetver.unwrap() >= 20181121 {
+            wtr.append(&mut self.item_id_32_raw.to_vec());
+        }
+        self.raw = wtr;
+    }
+}
+
+impl PacketCzRandomUpgradeItemUiClose {
+    pub fn packet_id(packetver: u32) -> &'static str {
+        "0xb50a"
+    }
+    pub fn from(buffer: &[u8], packetver: u32) -> PacketCzRandomUpgradeItemUiClose {
+        let mut offset: usize = 0;
+        PacketCzRandomUpgradeItemUiClose {
+            packet_id: {
+                let field = i16::from_le_bytes([buffer[offset], buffer[offset + 1]]);
+                field
+            },
+            packet_id_raw: {
+                let mut dst: [u8; 2] = [0u8; 2];
+                dst.clone_from_slice(&buffer[offset..offset + 2]);
+                offset += 2;
+                dst
+            },
+            raw: (&buffer[..offset]).to_vec(),
+        }
+    }
+    pub fn base_len(packetver: u32) -> usize {
+        let  base_len: usize = 2;
+        base_len
+    }
+    pub fn layout(packetver: u32) -> Vec<(String, usize, usize)> {
+        let mut fields: Vec<(String, usize, usize)> = Vec::new();
+        #[allow(unused_mut, unused_variables)]
+        let mut offset: usize = 0;
+        fields.push(("packet_id".to_string(), offset, 2));
+        offset += 2;
+        fields
+    }
+    pub fn set_packet_id(&mut self, value: i16) {
+        self.packet_id = value;
+    }
+    pub fn set_packet_id_raw(&mut self, value: [u8; 2]) {
+        self.packet_id_raw = value;
+    }
+    pub fn new(packetver: u32) -> PacketCzRandomUpgradeItemUiClose {
+        let packet_id = i16::from_le_bytes([0xb5, 0x0a]);
+        let packet_id_raw = [0xb5, 0x0a];
+        PacketCzRandomUpgradeItemUiClose {
+        raw: vec![],
+        packet_id,
+        packet_id_raw,
+        }
+    }
+    #[allow(unused_mut)]
+    pub fn from_json(entries: Vec<json_flat_parser::FlatJsonValue<&str>>, packetver: u32) -> Result<Self, String> {
+        let mut packet = PacketCzRandomUpgradeItemUiClose::new(packetver);
+        Ok(packet)
+    }
+}
+
+impl Packet for PacketCzRandomUpgradeItemUiClose {
+    fn id(&self, packetver: u32) -> &str {
+       PacketCzRandomUpgradeItemUiClose::packet_id(packetver)
+    }
+    fn name(&self) -> &str {
+       "PacketCzRandomUpgradeItemUiClose"
+    }
+    fn debug(&self) {
+            println!("{:?}", self)
+    }
+    fn display(&self) {
+            println!("{}", self)
+    }
+    fn pretty_debug(&self) {
+            println!("{:#?}", self)
+    }
+    fn raw(&self) -> &Vec<u8> {
+            &self.raw
+    }
+    fn raw_mut(&mut self) -> &mut Vec<u8> {
+            &mut self.raw
+    }
+    fn as_any(&self) -> &dyn Any{
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any{
+        self
+    }
+    fn base_len(&self, packetver: u32) -> usize {
+        Self::base_len(packetver)
+    }
+    fn layout(&self, packetver: u32) -> Vec<(String, usize, usize)> {
+        Self::layout(packetver)
+    }
+    fn to_json(&self, packetver: u32) -> String {
+        let mut json = String::from("{\n");
+        json.push_str(format!("\"packet_id\": {},\n",format!("\"{}\"", self.id(packetver))).as_str());
+        json.pop();
+        json.pop();
+        json.push_str("\n}");
+        json
+    }
+    fn fill_raw(&mut self) {
+      self.fill_raw_with_packetver(None)
+    }
+    fn fill_raw_with_packetver(&mut self, packetver: Option<u32>) {
+    let mut wtr;
+        wtr = vec![];
+        wtr.write_i16::<LittleEndian>(self.packet_id).unwrap();
+        self.packet_id_raw = wtr.try_into().unwrap();
+
+        wtr = vec![];
+        wtr.append(&mut self.packet_id_raw.to_vec());
+        self.raw = wtr;
+    }
+}
+
+impl PacketCzReqRandomUpgradeItem {
+    pub fn packet_id(packetver: u32) -> &'static str {
+        "0xb60a"
+    }
+    pub fn from(buffer: &[u8], packetver: u32) -> PacketCzReqRandomUpgradeItem {
+        let mut offset: usize = 0;
+        PacketCzReqRandomUpgradeItem {
+            packet_id: {
+                let field = i16::from_le_bytes([buffer[offset], buffer[offset + 1]]);
+                field
+            },
+            packet_id_raw: {
+                let mut dst: [u8; 2] = [0u8; 2];
+                dst.clone_from_slice(&buffer[offset..offset + 2]);
+                offset += 2;
+                dst
+            },
+            item_id: {
+                let field = if packetver < 20181121 {
+                   u16::from_le_bytes([buffer[offset], buffer[offset + 1]])
+                } else {
+                   0 as u16
+                };
+                field
+            },
+            item_id_raw: {
+                let mut dst: [u8; 2] = [0u8; 2];
+                if packetver < 20181121 {
+                    dst.clone_from_slice(&buffer[offset..offset + 2]);
+                    offset += 2;
+                }
+                dst
+            },
+            item_id_32: {
+                let field = if packetver >= 20181121 {
+                   u32::from_le_bytes([buffer[offset], buffer[offset + 1], buffer[offset + 2], buffer[offset + 3]])
+                } else {
+                   0 as u32
+                };
+                field
+            },
+            item_id_32_raw: {
+                let mut dst: [u8; 4] = [0u8; 4];
+                if packetver >= 20181121 {
+                    dst.clone_from_slice(&buffer[offset..offset + 4]);
+                    offset += 4;
+                }
+                dst
+            },
+            index: {
+                let field = u16::from_le_bytes([buffer[offset], buffer[offset + 1]]);
+                field
+            },
+            index_raw: {
+                let mut dst: [u8; 2] = [0u8; 2];
+                dst.clone_from_slice(&buffer[offset..offset + 2]);
+                offset += 2;
+                dst
+            },
+            raw: (&buffer[..offset]).to_vec(),
+        }
+    }
+    pub fn base_len(packetver: u32) -> usize {
+        let mut base_len: usize = 4;
+        if packetver < 20181121 {
+            base_len += 2;
+        }
+        if packetver >= 20181121 {
+            base_len += 4;
+        }
+        base_len
+    }
+    pub fn layout(packetver: u32) -> Vec<(String, usize, usize)> {
+        let mut fields: Vec<(String, usize, usize)> = Vec::new();
+        #[allow(unused_mut, unused_variables)]
+        let mut offset: usize = 0;
+        fields.push(("packet_id".to_string(), offset, 2));
+        offset += 2;
+        if packetver < 20181121 {
+            fields.push(("item_id".to_string(), offset, 2));
+            offset += 2;
+        }
+        if packetver >= 20181121 {
+            fields.push(("item_id_32".to_string(), offset, 4));
+            offset += 4;
+        }
+        fields.push(("index".to_string(), offset, 2));
+        offset += 2;
+        fields
+    }
+    pub fn set_packet_id(&mut self, value: i16) {
+        self.packet_id = value;
+    }
+    pub fn set_packet_id_raw(&mut self, value: [u8; 2]) {
+        self.packet_id_raw = value;
+    }
+    pub fn set_item_id(&mut self, value: u16) {
+        self.item_id = value;
+    }
+    pub fn set_item_id_raw(&mut self, value: [u8; 2]) {
+        self.item_id_raw = value;
+    }
+    pub fn set_item_id_32(&mut self, value: u32) {
+        self.item_id_32 = value;
+    }
+    pub fn set_item_id_32_raw(&mut self, value: [u8; 4]) {
+        self.item_id_32_raw = value;
+    }
+    pub fn set_index(&mut self, value: u16) {
+        self.index = value;
+    }
+    pub fn set_index_raw(&mut self, value: [u8; 2]) {
+        self.index_raw = value;
+    }
+    pub fn new(packetver: u32) -> PacketCzReqRandomUpgradeItem {
+        let packet_id = i16::from_le_bytes([0xb6, 0x0a]);
+        let packet_id_raw = [0xb6, 0x0a];
+        PacketCzReqRandomUpgradeItem {
+        raw: vec![],
+        packet_id,
+        packet_id_raw,
+        item_id: 0,
+        item_id_raw: [0; 2],
+        item_id_32: 0,
+        item_id_32_raw: [0; 4],
+        index: 0,
+        index_raw: [0; 2],
+        }
+    }
+    #[allow(unused_mut)]
+    pub fn from_json(entries: Vec<json_flat_parser::FlatJsonValue<&str>>, packetver: u32) -> Result<Self, String> {
+        let mut packet = PacketCzReqRandomUpgradeItem::new(packetver);
+        if let Some(entry) = entries.iter().find(|entry| entry.pointer.pointer.eq("/item_id")) {
+            if let Some(value) = entry.value {
+                packet.set_item_id(value.parse().map_err(|_| format!("Invalid value {} for item_id", value))?);
+            }
+        }
+        if let Some(entry) = entries.iter().find(|entry| entry.pointer.pointer.eq("/item_id_32")) {
+            if let Some(value) = entry.value {
+                packet.set_item_id_32(value.parse().map_err(|_| format!("Invalid value {} for item_id_32", value))?);
+            }
+        }
+        if let Some(entry) = entries.iter().find(|entry| entry.pointer.pointer.eq("/index")) {
+            if let Some(value) = entry.value {
+                packet.set_index(value.parse().map_err(|_| format!("Invalid value {} for index", value))?);
+            }
+        }
+        Ok(packet)
+    }
+}
+
+impl Packet for PacketCzReqRandomUpgradeItem {
+    fn id(&self, packetver: u32) -> &str {
+       PacketCzReqRandomUpgradeItem::packet_id(packetver)
+    }
+    fn name(&self) -> &str {
+       "PacketCzReqRandomUpgradeItem"
+    }
+    fn debug(&self) {
+            println!("{:?}", self)
+    }
+    fn display(&self) {
+            println!("{}", self)
+    }
+    fn pretty_debug(&self) {
+            println!("{:#?}", self)
+    }
+    fn raw(&self) -> &Vec<u8> {
+            &self.raw
+    }
+    fn raw_mut(&mut self) -> &mut Vec<u8> {
+            &mut self.raw
+    }
+    fn as_any(&self) -> &dyn Any{
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any{
+        self
+    }
+    fn base_len(&self, packetver: u32) -> usize {
+        Self::base_len(packetver)
+    }
+    fn layout(&self, packetver: u32) -> Vec<(String, usize, usize)> {
+        Self::layout(packetver)
+    }
+    fn to_json(&self, packetver: u32) -> String {
+        let mut json = String::from("{\n");
+        json.push_str(format!("\"packet_id\": {},\n",format!("\"{}\"", self.id(packetver))).as_str());
+        json.push_str(format!("\"item_id\": {},\n",self.item_id.to_string()).as_str());
+        json.push_str(format!("\"item_id_32\": {},\n",self.item_id_32.to_string()).as_str());
+        json.push_str(format!("\"index\": {},\n",self.index.to_string()).as_str());
+        json.pop();
+        json.pop();
+        json.push_str("\n}");
+        json
+    }
+    fn fill_raw(&mut self) {
+      self.fill_raw_with_packetver(None)
+    }
+    fn fill_raw_with_packetver(&mut self, packetver: Option<u32>) {
+    let mut wtr;
+        wtr = vec![];
+        wtr.write_i16::<LittleEndian>(self.packet_id).unwrap();
+        self.packet_id_raw = wtr.try_into().unwrap();
+        wtr = vec![];
+        wtr.write_u16::<LittleEndian>(self.item_id).unwrap();
+        self.item_id_raw = wtr.try_into().unwrap();
+        wtr = vec![];
+        wtr.write_u32::<LittleEndian>(self.item_id_32).unwrap();
+        self.item_id_32_raw = wtr.try_into().unwrap();
+        wtr = vec![];
+        wtr.write_u16::<LittleEndian>(self.index).unwrap();
+        self.index_raw = wtr.try_into().unwrap();
+
+        wtr = vec![];
+        wtr.append(&mut self.packet_id_raw.to_vec());
+        if packetver.is_none() {
+          wtr.append(&mut self.item_id_raw.to_vec());
+        } else if packetver.unwrap() < 20181121 {
+            wtr.append(&mut self.item_id_raw.to_vec());
+        }
+        if packetver.is_none() {
+          wtr.append(&mut self.item_id_32_raw.to_vec());
+        } else if packetver.unwrap() >= 20181121 {
+            wtr.append(&mut self.item_id_32_raw.to_vec());
+        }
+        wtr.append(&mut self.index_raw.to_vec());
+        self.raw = wtr;
+    }
+}
+
+impl PacketZcAckRandomUpgradeItem {
+    pub fn packet_id(packetver: u32) -> &'static str {
+        "0xb70a"
+    }
+    pub fn from(buffer: &[u8], packetver: u32) -> PacketZcAckRandomUpgradeItem {
+        let mut offset: usize = 0;
+        PacketZcAckRandomUpgradeItem {
+            packet_id: {
+                let field = i16::from_le_bytes([buffer[offset], buffer[offset + 1]]);
+                field
+            },
+            packet_id_raw: {
+                let mut dst: [u8; 2] = [0u8; 2];
+                dst.clone_from_slice(&buffer[offset..offset + 2]);
+                offset += 2;
+                dst
+            },
+            result: {
+                let field = u16::from_le_bytes([buffer[offset], buffer[offset + 1]]);
+                field
+            },
+            result_raw: {
+                let mut dst: [u8; 2] = [0u8; 2];
+                dst.clone_from_slice(&buffer[offset..offset + 2]);
+                offset += 2;
+                dst
+            },
+            raw: (&buffer[..offset]).to_vec(),
+        }
+    }
+    pub fn base_len(packetver: u32) -> usize {
+        let  base_len: usize = 4;
+        base_len
+    }
+    pub fn layout(packetver: u32) -> Vec<(String, usize, usize)> {
+        let mut fields: Vec<(String, usize, usize)> = Vec::new();
+        #[allow(unused_mut, unused_variables)]
+        let mut offset: usize = 0;
+        fields.push(("packet_id".to_string(), offset, 2));
+        offset += 2;
+        fields.push(("result".to_string(), offset, 2));
+        offset += 2;
+        fields
+    }
+    pub fn set_packet_id(&mut self, value: i16) {
+        self.packet_id = value;
+    }
+    pub fn set_packet_id_raw(&mut self, value: [u8; 2]) {
+        self.packet_id_raw = value;
+    }
+    pub fn set_result(&mut self, value: u16) {
+        self.result = value;
+    }
+    pub fn set_result_raw(&mut self, value: [u8; 2]) {
+        self.result_raw = value;
+    }
+    pub fn new(packetver: u32) -> PacketZcAckRandomUpgradeItem {
+        let packet_id = i16::from_le_bytes([0xb7, 0x0a]);
+        let packet_id_raw = [0xb7, 0x0a];
+        PacketZcAckRandomUpgradeItem {
+        raw: vec![],
+        packet_id,
+        packet_id_raw,
+        result: 0,
+        result_raw: [0; 2],
+        }
+    }
+    #[allow(unused_mut)]
+    pub fn from_json(entries: Vec<json_flat_parser::FlatJsonValue<&str>>, packetver: u32) -> Result<Self, String> {
+        let mut packet = PacketZcAckRandomUpgradeItem::new(packetver);
+        if let Some(entry) = entries.iter().find(|entry| entry.pointer.pointer.eq("/result")) {
+            if let Some(value) = entry.value {
+                packet.set_result(value.parse().map_err(|_| format!("Invalid value {} for result", value))?);
+            }
+        }
+        Ok(packet)
+    }
+}
+
+impl Packet for PacketZcAckRandomUpgradeItem {
+    fn id(&self, packetver: u32) -> &str {
+       PacketZcAckRandomUpgradeItem::packet_id(packetver)
+    }
+    fn name(&self) -> &str {
+       "PacketZcAckRandomUpgradeItem"
+    }
+    fn debug(&self) {
+            println!("{:?}", self)
+    }
+    fn display(&self) {
+            println!("{}", self)
+    }
+    fn pretty_debug(&self) {
+            println!("{:#?}", self)
+    }
+    fn raw(&self) -> &Vec<u8> {
+            &self.raw
+    }
+    fn raw_mut(&mut self) -> &mut Vec<u8> {
+            &mut self.raw
+    }
+    fn as_any(&self) -> &dyn Any{
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any{
+        self
+    }
+    fn base_len(&self, packetver: u32) -> usize {
+        Self::base_len(packetver)
+    }
+    fn layout(&self, packetver: u32) -> Vec<(String, usize, usize)> {
+        Self::layout(packetver)
+    }
+    fn to_json(&self, packetver: u32) -> String {
+        let mut json = String::from("{\n");
+        json.push_str(format!("\"packet_id\": {},\n",format!("\"{}\"", self.id(packetver))).as_str());
+        json.push_str(format!("\"result\": {},\n",self.result.to_string()).as_str());
+        json.pop();
+        json.pop();
+        json.push_str("\n}");
+        json
+    }
+    fn fill_raw(&mut self) {
+      self.fill_raw_with_packetver(None)
+    }
+    fn fill_raw_with_packetver(&mut self, packetver: Option<u32>) {
+    let mut wtr;
+        wtr = vec![];
+        wtr.write_i16::<LittleEndian>(self.packet_id).unwrap();
+        self.packet_id_raw = wtr.try_into().unwrap();
+        wtr = vec![];
+        wtr.write_u16::<LittleEndian>(self.result).unwrap();
+        self.result_raw = wtr.try_into().unwrap();
+
+        wtr = vec![];
+        wtr.append(&mut self.packet_id_raw.to_vec());
+        wtr.append(&mut self.result_raw.to_vec());
+        self.raw = wtr;
+    }
+}
+
+impl PacketZcChangeItemOption {
+    pub fn packet_id(packetver: u32) -> &'static str {
+        "0x430b"
+    }
+    pub fn from(buffer: &[u8], packetver: u32) -> PacketZcChangeItemOption {
+        let mut offset: usize = 0;
+        PacketZcChangeItemOption {
+            packet_id: {
+                let field = i16::from_le_bytes([buffer[offset], buffer[offset + 1]]);
+                field
+            },
+            packet_id_raw: {
+                let mut dst: [u8; 2] = [0u8; 2];
+                dst.clone_from_slice(&buffer[offset..offset + 2]);
+                offset += 2;
+                dst
+            },
+            index: {
+                let field = i16::from_le_bytes([buffer[offset], buffer[offset + 1]]);
+                field
+            },
+            index_raw: {
+                let mut dst: [u8; 2] = [0u8; 2];
+                dst.clone_from_slice(&buffer[offset..offset + 2]);
+                offset += 2;
+                dst
+            },
+            is_damaged: {
+                let field = i8::from_le_bytes([buffer[offset]]);
+                field
+            },
+            is_damaged_raw: {
+                let mut dst: [u8; 1] = [0u8; 1];
+                dst.clone_from_slice(&buffer[offset..offset + 1]);
+                offset += 1;
+                dst
+            },
+            slot: {
+                let field = EQUIPSLOTINFO::from(&buffer[offset..offset + EQUIPSLOTINFO::base_len(packetver)], packetver);
+                field
+            },
+            slot_raw: {
+                let raw = buffer[offset..offset + EQUIPSLOTINFO::base_len(packetver)].to_vec();
+                offset += raw.len();
+                raw
+            },
+            option_data: {
+                let field =  {
+                let mut dst: [u8; 25] = [0_u8; 25];
+                for (index, byte) in buffer[offset..offset + 25].iter().enumerate() {
+                    dst[index] = *byte as u8;
+                }
+                dst
+            };
+                field
+            },
+            option_data_raw: {
+                let mut dst: [u8; 25] = [0u8; 25];
+                dst.clone_from_slice(&buffer[offset..offset + 25]);
+                offset += 25;
+                dst
+            },
+            refining_level: {
+                let field = u8::from_le_bytes([buffer[offset]]);
+                field
+            },
+            refining_level_raw: {
+                let mut dst: [u8; 1] = [0u8; 1];
+                dst.clone_from_slice(&buffer[offset..offset + 1]);
+                offset += 1;
+                dst
+            },
+            grade: {
+                let field = u8::from_le_bytes([buffer[offset]]);
+                field
+            },
+            grade_raw: {
+                let mut dst: [u8; 1] = [0u8; 1];
+                dst.clone_from_slice(&buffer[offset..offset + 1]);
+                offset += 1;
+                dst
+            },
+            raw: (&buffer[..offset]).to_vec(),
+        }
+    }
+    pub fn base_len(packetver: u32) -> usize {
+        let mut base_len: usize = 32;
+        base_len += EQUIPSLOTINFO::base_len(packetver);
+        base_len
+    }
+    pub fn layout(packetver: u32) -> Vec<(String, usize, usize)> {
+        let mut fields: Vec<(String, usize, usize)> = Vec::new();
+        #[allow(unused_mut, unused_variables)]
+        let mut offset: usize = 0;
+        fields.push(("packet_id".to_string(), offset, 2));
+        offset += 2;
+        fields.push(("index".to_string(), offset, 2));
+        offset += 2;
+        fields.push(("is_damaged".to_string(), offset, 1));
+        offset += 1;
+        for i in 0..1 {
+            let _ = i;
+            for (f, o, l) in EQUIPSLOTINFO::layout(packetver) { fields.push((format!("slot.{f}"), offset + o, l)); }
+            offset += EQUIPSLOTINFO::base_len(packetver);
+        }
+        fields.push(("option_data".to_string(), offset, 25));
+        offset += 25;
+        fields.push(("refining_level".to_string(), offset, 1));
+        offset += 1;
+        fields.push(("grade".to_string(), offset, 1));
+        offset += 1;
+        fields
+    }
+    pub fn set_packet_id(&mut self, value: i16) {
+        self.packet_id = value;
+    }
+    pub fn set_packet_id_raw(&mut self, value: [u8; 2]) {
+        self.packet_id_raw = value;
+    }
+    pub fn set_index(&mut self, value: i16) {
+        self.index = value;
+    }
+    pub fn set_index_raw(&mut self, value: [u8; 2]) {
+        self.index_raw = value;
+    }
+    pub fn set_is_damaged(&mut self, value: i8) {
+        self.is_damaged = value;
+    }
+    pub fn set_is_damaged_raw(&mut self, value: [u8; 1]) {
+        self.is_damaged_raw = value;
+    }
+    pub fn set_slot(&mut self, value: EQUIPSLOTINFO) {
+        self.slot = value;
+    }
+    pub fn set_slot_raw(&mut self, value: Vec<u8>) {
+        self.slot_raw = value;
+    }
+    pub fn set_option_data(&mut self, value: [u8; 25]) {
+        self.option_data = value;
+    }
+    pub fn set_option_data_raw(&mut self, value: [u8; 25]) {
+        self.option_data_raw = value;
+    }
+    pub fn set_refining_level(&mut self, value: u8) {
+        self.refining_level = value;
+    }
+    pub fn set_refining_level_raw(&mut self, value: [u8; 1]) {
+        self.refining_level_raw = value;
+    }
+    pub fn set_grade(&mut self, value: u8) {
+        self.grade = value;
+    }
+    pub fn set_grade_raw(&mut self, value: [u8; 1]) {
+        self.grade_raw = value;
+    }
+    pub fn new(packetver: u32) -> PacketZcChangeItemOption {
+        let packet_id = i16::from_le_bytes([0x43, 0x0b]);
+        let packet_id_raw = [0x43, 0x0b];
+        PacketZcChangeItemOption {
+        raw: vec![],
+        packet_id,
+        packet_id_raw,
+        index: 0,
+        index_raw: [0; 2],
+        is_damaged: 0,
+        is_damaged_raw: [0; 1],
+        slot: EQUIPSLOTINFO::new(packetver),
+        slot_raw: vec![],
+        option_data: [0; 25],
+        option_data_raw: [0; 25],
+        refining_level: 0,
+        refining_level_raw: [0; 1],
+        grade: 0,
+        grade_raw: [0; 1],
+        }
+    }
+    #[allow(unused_mut)]
+    pub fn from_json(entries: Vec<json_flat_parser::FlatJsonValue<&str>>, packetver: u32) -> Result<Self, String> {
+        let mut packet = PacketZcChangeItemOption::new(packetver);
+        if let Some(entry) = entries.iter().find(|entry| entry.pointer.pointer.eq("/index")) {
+            if let Some(value) = entry.value {
+                packet.set_index(value.parse().map_err(|_| format!("Invalid value {} for index", value))?);
+            }
+        }
+        if let Some(entry) = entries.iter().find(|entry| entry.pointer.pointer.eq("/is_damaged")) {
+            if let Some(value) = entry.value {
+                packet.set_is_damaged(value.parse().map_err(|_| format!("Invalid value {} for is_damaged", value))?);
+            }
+        }
+        if let Some(entry) = entries.iter().find(|entry| entry.pointer.pointer.eq("/slot")) {
+            if let Some(value) = entry.value {
+            }
+        }
+        if let Some(entry) = entries.iter().find(|entry| entry.pointer.pointer.eq("/option_data")) {
+            if let Some(value) = entry.value {
+            }
+        }
+        if let Some(entry) = entries.iter().find(|entry| entry.pointer.pointer.eq("/refining_level")) {
+            if let Some(value) = entry.value {
+                packet.set_refining_level(value.parse().map_err(|_| format!("Invalid value {} for refining_level", value))?);
+            }
+        }
+        if let Some(entry) = entries.iter().find(|entry| entry.pointer.pointer.eq("/grade")) {
+            if let Some(value) = entry.value {
+                packet.set_grade(value.parse().map_err(|_| format!("Invalid value {} for grade", value))?);
+            }
+        }
+        Ok(packet)
+    }
+}
+
+impl Packet for PacketZcChangeItemOption {
+    fn id(&self, packetver: u32) -> &str {
+       PacketZcChangeItemOption::packet_id(packetver)
+    }
+    fn name(&self) -> &str {
+       "PacketZcChangeItemOption"
+    }
+    fn debug(&self) {
+            println!("{:?}", self)
+    }
+    fn display(&self) {
+            println!("{}", self)
+    }
+    fn pretty_debug(&self) {
+            println!("{:#?}", self)
+    }
+    fn raw(&self) -> &Vec<u8> {
+            &self.raw
+    }
+    fn raw_mut(&mut self) -> &mut Vec<u8> {
+            &mut self.raw
+    }
+    fn as_any(&self) -> &dyn Any{
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any{
+        self
+    }
+    fn base_len(&self, packetver: u32) -> usize {
+        Self::base_len(packetver)
+    }
+    fn layout(&self, packetver: u32) -> Vec<(String, usize, usize)> {
+        Self::layout(packetver)
+    }
+    fn to_json(&self, packetver: u32) -> String {
+        let mut json = String::from("{\n");
+        json.push_str(format!("\"packet_id\": {},\n",format!("\"{}\"", self.id(packetver))).as_str());
+        json.push_str(format!("\"index\": {},\n",self.index.to_string()).as_str());
+        json.push_str(format!("\"is_damaged\": {},\n",self.is_damaged.to_string()).as_str());
+        json.push_str(format!("\"option_data\": {},\n",format!("[{}]", self.option_data.iter().map(|byte| byte.to_string()).collect::<Vec<String>>().join(","))).as_str());
+        json.push_str(format!("\"refining_level\": {},\n",self.refining_level.to_string()).as_str());
+        json.push_str(format!("\"grade\": {},\n",self.grade.to_string()).as_str());
+        json.pop();
+        json.pop();
+        json.push_str("\n}");
+        json
+    }
+    fn fill_raw(&mut self) {
+      self.fill_raw_with_packetver(None)
+    }
+    fn fill_raw_with_packetver(&mut self, packetver: Option<u32>) {
+    let mut wtr;
+        wtr = vec![];
+        wtr.write_i16::<LittleEndian>(self.packet_id).unwrap();
+        self.packet_id_raw = wtr.try_into().unwrap();
+        wtr = vec![];
+        wtr.write_i16::<LittleEndian>(self.index).unwrap();
+        self.index_raw = wtr.try_into().unwrap();
+        wtr = vec![];
+        wtr.write_i8(self.is_damaged).unwrap();
+        self.is_damaged_raw = wtr.try_into().unwrap();
+        self.slot.fill_raw_with_packetver(packetver);
+        self.slot_raw = self.slot.clone().raw;
+
+        wtr = vec![];
+        for item in self.option_data {
+            wtr.write_u8(item).unwrap();
+        }
+        self.option_data_raw = wtr.try_into().unwrap();
+        wtr = vec![];
+        wtr.write_u8(self.refining_level).unwrap();
+        self.refining_level_raw = wtr.try_into().unwrap();
+        wtr = vec![];
+        wtr.write_u8(self.grade).unwrap();
+        self.grade_raw = wtr.try_into().unwrap();
+
+        wtr = vec![];
+        wtr.append(&mut self.packet_id_raw.to_vec());
+        wtr.append(&mut self.index_raw.to_vec());
+        wtr.append(&mut self.is_damaged_raw.to_vec());
+        wtr.append(&mut self.slot_raw.to_vec());
+        wtr.append(&mut self.option_data_raw.to_vec());
+        wtr.append(&mut self.refining_level_raw.to_vec());
+        wtr.append(&mut self.grade_raw.to_vec());
+        self.raw = wtr;
+    }
+}
+
 impl ServerAddr {
     pub fn from(buffer: &[u8], packetver: u32) -> ServerAddr {
         let mut offset: usize = 0;

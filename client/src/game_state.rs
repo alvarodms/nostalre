@@ -724,6 +724,11 @@ pub struct GameState {
     pub show_fps: bool,
     pub schedulers: Schedulers,
     pub effect_keys: EffectKeys,
+    /// The upgrade window the server holds open for this package (0x0ab4), until we close it (0x0ab5) or a warp
+    /// makes it forget: while it does, the player can do nothing `pc_cant_act` guards
+    pub upgrade_open: Option<u32>,
+    /// The item sent to be upgraded (0x0ab6), until the server answers
+    pub upgrade_sent: Option<u16>,
 }
 
 pub const COMPANION_AI_CONFIG_PATH: &str = "companion_ai.json";
@@ -855,6 +860,8 @@ impl GameState {
             show_fps: false,
             schedulers: Schedulers::new(),
             effect_keys: EffectKeys::default(),
+            upgrade_open: None,
+            upgrade_sent: None,
         }
     }
 

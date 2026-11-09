@@ -21005,6 +21005,110 @@ impl Display for PacketCzReqEquipswitchSingle {
     }
 }
 
+impl Debug for PacketZcRandomUpgradeItemUiOpen {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PacketZcRandomUpgradeItemUiOpen")
+            .field("packet_id[0, 2]", &format!("{:02X?}", &self.packet_id_raw))
+            .field("item_id[2, 4]", &format!("{:02X?}", &self.item_id_raw))
+            .field("item_id_32[4, 8]", &format!("{:02X?}", &self.item_id_32_raw))
+        .finish()
+    }
+}
+
+impl Display for PacketZcRandomUpgradeItemUiOpen {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut fields = Vec::new();
+        fields.push(format!("packet_id(short as i16)[0, 2]: 0X{:02X?}{:02X?}", &self.packet_id_raw[0], &self.packet_id_raw[1]));
+        fields.push(format!("item_id(unsigned short as u16)[2, 4]: {}", &self.item_id));
+        fields.push(format!("item_id_32(unsigned long as u32)[4, 8]: {}", &self.item_id_32));
+        write!(f, "PacketZcRandomUpgradeItemUiOpen\n {}", fields.join(",\n "))
+    }
+}
+
+impl Debug for PacketCzRandomUpgradeItemUiClose {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PacketCzRandomUpgradeItemUiClose")
+            .field("packet_id[0, 2]", &format!("{:02X?}", &self.packet_id_raw))
+        .finish()
+    }
+}
+
+impl Display for PacketCzRandomUpgradeItemUiClose {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut fields = Vec::new();
+        fields.push(format!("packet_id(short as i16)[0, 2]: 0X{:02X?}{:02X?}", &self.packet_id_raw[0], &self.packet_id_raw[1]));
+        write!(f, "PacketCzRandomUpgradeItemUiClose\n {}", fields.join(",\n "))
+    }
+}
+
+impl Debug for PacketCzReqRandomUpgradeItem {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PacketCzReqRandomUpgradeItem")
+            .field("packet_id[0, 2]", &format!("{:02X?}", &self.packet_id_raw))
+            .field("item_id[2, 4]", &format!("{:02X?}", &self.item_id_raw))
+            .field("item_id_32[4, 8]", &format!("{:02X?}", &self.item_id_32_raw))
+            .field("index[8, 10]", &format!("{:02X?}", &self.index_raw))
+        .finish()
+    }
+}
+
+impl Display for PacketCzReqRandomUpgradeItem {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut fields = Vec::new();
+        fields.push(format!("packet_id(short as i16)[0, 2]: 0X{:02X?}{:02X?}", &self.packet_id_raw[0], &self.packet_id_raw[1]));
+        fields.push(format!("item_id(unsigned short as u16)[2, 4]: {}", &self.item_id));
+        fields.push(format!("item_id_32(unsigned long as u32)[4, 8]: {}", &self.item_id_32));
+        fields.push(format!("index(unsigned short as u16)[8, 10]: {}", &self.index));
+        write!(f, "PacketCzReqRandomUpgradeItem\n {}", fields.join(",\n "))
+    }
+}
+
+impl Debug for PacketZcAckRandomUpgradeItem {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PacketZcAckRandomUpgradeItem")
+            .field("packet_id[0, 2]", &format!("{:02X?}", &self.packet_id_raw))
+            .field("result[2, 4]", &format!("{:02X?}", &self.result_raw))
+        .finish()
+    }
+}
+
+impl Display for PacketZcAckRandomUpgradeItem {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut fields = Vec::new();
+        fields.push(format!("packet_id(short as i16)[0, 2]: 0X{:02X?}{:02X?}", &self.packet_id_raw[0], &self.packet_id_raw[1]));
+        fields.push(format!("result(unsigned short as u16)[2, 4]: {}", &self.result));
+        write!(f, "PacketZcAckRandomUpgradeItem\n {}", fields.join(",\n "))
+    }
+}
+
+impl Debug for PacketZcChangeItemOption {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PacketZcChangeItemOption")
+            .field("packet_id[0, 2]", &format!("{:02X?}", &self.packet_id_raw))
+            .field("index[2, 4]", &format!("{:02X?}", &self.index_raw))
+            .field("is_damaged[4, 5]", &format!("{:02X?}", &self.is_damaged_raw))
+            .field("slot[5, ?]", &format!("{:02X?}", &self.slot_raw))
+            .field("option_data[5, 30]", &format!("{:02X?}", &self.option_data_raw))
+            .field("refining_level[30, 31]", &format!("{:02X?}", &self.refining_level_raw))
+            .field("grade[31, 32]", &format!("{:02X?}", &self.grade_raw))
+        .finish()
+    }
+}
+
+impl Display for PacketZcChangeItemOption {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut fields = Vec::new();
+        fields.push(format!("packet_id(short as i16)[0, 2]: 0X{:02X?}{:02X?}", &self.packet_id_raw[0], &self.packet_id_raw[1]));
+        fields.push(format!("index(short as i16)[2, 4]: {}", &self.index));
+        fields.push(format!("is_damaged(char as i8)[4, 5]: {}", &self.is_damaged));
+        fields.push(format!("slot(struct as Struct)[5, ?]: {}", &self.slot));
+        fields.push(format!("option_data(unsigned char[] as u8[])[5, 30]: {}", &self.option_data.pretty_output()));
+        fields.push(format!("refining_level(unsigned char as u8)[30, 31]: {}", &self.refining_level));
+        fields.push(format!("grade(unsigned char as u8)[31, 32]: {}", &self.grade));
+        write!(f, "PacketZcChangeItemOption\n {}", fields.join(",\n "))
+    }
+}
+
 impl Debug for ServerAddr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ServerAddr")

@@ -12939,6 +12939,65 @@ pub struct PacketCzReqEquipswitchSingle {
 }
 
 #[derive(Clone)]
+pub struct PacketZcRandomUpgradeItemUiOpen {
+    pub raw: Vec<u8>,
+    pub packet_id: i16,
+    pub packet_id_raw: [u8; 2],
+    pub item_id: u16,
+    pub item_id_raw: [u8; 2],
+    pub item_id_32: u32,
+    pub item_id_32_raw: [u8; 4],
+}
+
+#[derive(Clone)]
+pub struct PacketCzRandomUpgradeItemUiClose {
+    pub raw: Vec<u8>,
+    pub packet_id: i16,
+    pub packet_id_raw: [u8; 2],
+}
+
+#[derive(Clone)]
+pub struct PacketCzReqRandomUpgradeItem {
+    pub raw: Vec<u8>,
+    pub packet_id: i16,
+    pub packet_id_raw: [u8; 2],
+    pub item_id: u16,
+    pub item_id_raw: [u8; 2],
+    pub item_id_32: u32,
+    pub item_id_32_raw: [u8; 4],
+    pub index: u16,
+    pub index_raw: [u8; 2],
+}
+
+#[derive(Clone)]
+pub struct PacketZcAckRandomUpgradeItem {
+    pub raw: Vec<u8>,
+    pub packet_id: i16,
+    pub packet_id_raw: [u8; 2],
+    pub result: u16,
+    pub result_raw: [u8; 2],
+}
+
+#[derive(Clone)]
+pub struct PacketZcChangeItemOption {
+    pub raw: Vec<u8>,
+    pub packet_id: i16,
+    pub packet_id_raw: [u8; 2],
+    pub index: i16,
+    pub index_raw: [u8; 2],
+    pub is_damaged: i8,
+    pub is_damaged_raw: [u8; 1],
+    pub slot: EQUIPSLOTINFO,
+    pub slot_raw: Vec<u8>,
+    pub option_data: [u8; 25],
+    pub option_data_raw: [u8; 25],
+    pub refining_level: u8,
+    pub refining_level_raw: [u8; 1],
+    pub grade: u8,
+    pub grade_raw: [u8; 1],
+}
+
+#[derive(Clone)]
 pub struct ServerAddr {
     pub raw: Vec<u8>,
     pub ip: u32,

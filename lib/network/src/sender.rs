@@ -322,6 +322,14 @@ mod tests {
                 build_use_package_item_packet(2, 2000000, 101454, 3, pv)
             ),
             case!(
+                "clif_parse_laphine_upgrade",
+                build_upgrade_item_packet(100340, 2, pv)
+            ),
+            case!(
+                "clif_parse_laphine_upgrade_close",
+                build_upgrade_close_packet(pv)
+            ),
+            case!(
                 "clif_parse_NpcBuyListSend",
                 build_purchase_item_list_packet(&[(1, 501)], pv)
             ),
@@ -1626,6 +1634,27 @@ pub fn build_use_package_item_packet(
     buf.extend_from_slice(&box_id.to_le_bytes());
     buf.extend_from_slice(&group.to_le_bytes());
     buf
+}
+
+/// CZ_REQ_RANDOM_UPGRADE_ITEM (0x0ab6): upgrade the bag's item at `index` (as the client numbers it) with the
+/// package the server opened the window for
+pub fn build_upgrade_item_packet(package_id: u32, index: u16, packetver: u32) -> Vec<u8> {
+    let mut pkt = PacketCzReqRandomUpgradeItem::new(packetver);
+    if packetver >= 20181121 {
+        pkt.set_item_id_32(package_id);
+    } else {
+        pkt.set_item_id(u16::try_from(package_id).unwrap_or(0));
+    }
+    pkt.set_index(index);
+    pkt.fill_raw_with_packetver(Some(packetver));
+    pkt.raw
+}
+
+/// CZ_RANDOM_UPGRADE_ITEM_UI_CLOSE (0x0ab5): the upgrade window closed; the server lets the player act again
+pub fn build_upgrade_close_packet(packetver: u32) -> Vec<u8> {
+    let mut pkt = PacketCzRandomUpgradeItemUiClose::new(packetver);
+    pkt.fill_raw_with_packetver(Some(packetver));
+    pkt.raw
 }
 
 pub fn build_equip_item_packet(index: u16, location: u32, packetver: u32) -> Vec<u8> {

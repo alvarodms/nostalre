@@ -113,6 +113,70 @@ impl Social {
                 ensure(refine == wanted.refine, &format!("refine +{refine}, not +{}", wanted.refine))?;
                 format!("choice {group}: item {} at +{refine}", wanted.item_id)
             }
+            // an upgrade package (@item, two of them) used on ITEM (@item2 at REFINE): the window opens (0x0ab4); the
+            // package itself is turned down (0x0ab7 failed, nothing spent); ITEM comes back at the refine the
+            // server's laphine_upgrade.yml gives (a removal, then an add); the close (0x0ab5) frees the player, so the
+            // second package opens the window again (the server refuses while one is open)
+            ("upgrade", &[package, item, refine]) => {
+                let rule = nostalre_game::upgrade_tables::upgrade_rule(package)
+                    .ok_or(format!("{package} is not in laphine_upgrade.yml"))?;
+                let wanted = match rule.result(refine as u8) {
+                    nostalre_game::upgrade_package::RefineResult::Exactly(r) => r,
+                    other => return Err(format!("{package} gives {other:?}; pick a package with a set refine")),
+                };
+                let gm_item = chat(me, &format!("@item2 {item} 1 1 {refine} 0 0 0 0 0"), pv);
+                let target = self
+                    .request(zone, gm_item, REPLY, &format!("item {item}"), |e| match e {
+                        GameEvent::InventoryItemPickup { index, item_id, .. } if *item_id == item => {
+                            Some(*index)
+                        }
+                        _ => None,
+                    })
+                    .await?;
+                let index = self.get_item(zone, me, package, 2).await?;
+                let opened = |e: &GameEvent| match e {
+                    GameEvent::UpgradeWindowOpened { package_id } => Some(*package_id),
+                    _ => None,
+                };
+                let use_it = sender::build_use_item_packet(index, self.aid, pv);
+                let shown = self.request(zone, use_it.clone(), REPLY, "window (0x0ab4)", opened).await?;
+                ensure(shown == package, &format!("window for {shown}, not {package}"))?;
+                let answered = |e: &GameEvent| match e {
+                    GameEvent::UpgradeAnswered { failed } => Some(*failed),
+                    _ => None,
+                };
+                let wrong = sender::build_upgrade_item_packet(package, index, pv);
+                let failed = self.request(zone, wrong, REPLY, "refusal (0x0ab7)", answered).await?;
+                ensure(failed, "the package itself was upgraded")?;
+                // the item comes back and the answer follows in the same read: both are taken in one wait
+                let make = sender::build_upgrade_item_packet(package, target, pv);
+                let mut back = None;
+                let failed = self
+                    .request(zone, make, REPLY, "item back and answer (0x0ab7)", |e| match e {
+                        GameEvent::InventoryItemPickup {
+                            index,
+                            item_id,
+                            refining_level,
+                            ..
+                        } if *item_id == item && *index == target => {
+                            back = Some(*refining_level);
+                            None
+                        }
+                        GameEvent::UpgradeAnswered { failed } => Some(*failed),
+                        _ => None,
+                    })
+                    .await?;
+                ensure(!failed, "the upgrade was refused")?;
+                let got = back.ok_or(format!("item {item} did not come back"))?;
+                ensure(got == wanted, &format!("+{got}, not +{wanted}"))?;
+                zone.send(sender::build_upgrade_close_packet(pv)).await;
+                // past `item_use_interval`, which refuses a use that comes too soon
+                self.idle(zone, Duration::from_millis(500)).await;
+                let again = self.request(zone, use_it, REPLY, "window again after the close", opened).await?;
+                ensure(again == package, "the second window is another package's")?;
+                zone.send(sender::build_upgrade_close_packet(pv)).await;
+                format!("item {item} +{refine} to +{got}; the package refused, the close freed the player")
+            }
             ("cart", &[item]) => {
                 let cart_index = self.put_in_cart(zone, me, item).await?;
                 let back = sender::build_move_item_cart_to_body_packet(cart_index, 1, pv);

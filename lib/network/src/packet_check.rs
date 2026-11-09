@@ -94,6 +94,7 @@ pub const ACCEPTED: &[(u16, &str, &str)] = &[
     (0x0b39, "item_info[].option_data", OPTIONS),
     (0x0b41, "option_data", OPTIONS),
     (0x0b42, "option_data", OPTIONS),
+    (0x0b43, "option_data", OPTIONS),
     (0x0b44, "option_data", OPTIONS),
     (0x0b45, "option_data", OPTIONS),
     (0x0b3d, "item_list[].option_data", OPTIONS),
