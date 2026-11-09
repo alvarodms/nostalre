@@ -34,7 +34,9 @@
 //!   `chatroom-join:OWNER_AID`, `cart-load:ITEM` (one left in the cart, for a game run), `refine:X,Y,ITEM` (a
 //!   refiner's window, a safe +1), `walk:X,Y`, `talk:X,Y` (the dialog answered with the first choices; the quests it
 //!   gave or took), `server-move:X,Y` (onto a warp to the second map server: 0x0ac7 followed),
-//!   `use-package:ITEM,GROUP` (a selection box opened on that choice, 0x0baf: its first item given);
+//!   `use-package:ITEM,GROUP` (a selection box opened on that choice, 0x0baf: its first item given),
+//!   `upgrade:PACKAGE,ITEM,REFINE` (an upgrade package used on ITEM at REFINE: 0x0ab4, a refusal, the upgrade, and
+//!   the window open again after 0x0ab5);
 //! - `wait:SECONDS`, `wait-guild:SECONDS` (until we are in a guild).
 //!
 //! Party, guild and friend invitations are accepted, and the social events and our option bits (mounts, costumes)

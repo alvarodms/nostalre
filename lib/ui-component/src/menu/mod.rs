@@ -8,6 +8,7 @@ mod home;
 mod item_detail;
 mod items;
 mod package;
+mod upgrade;
 mod party;
 mod quests;
 mod settings;
@@ -324,6 +325,22 @@ impl Menu {
     pub fn choose_package(&mut self, package: nostalre_game::select_package::SelectPackage) {
         self.open_on(HotkeyAction::ToggleInventory);
         self.items.choose(package);
+    }
+
+    /// The server opened an upgrade package's window: the menu open on Items, the bag's items it takes up
+    pub fn choose_upgrade(&mut self, package: nostalre_game::upgrade_package::UpgradePackage) {
+        self.open_on(HotkeyAction::ToggleInventory);
+        self.items.upgrade(package);
+    }
+
+    /// Whether an upgrade package's window is up in the menu
+    pub fn upgrading(&self) -> bool {
+        self.open && self.items.upgrading()
+    }
+
+    /// The server's answer to the upgrade: `Some(message)` when it failed
+    pub fn upgrade_answered(&mut self, failed: Option<String>) {
+        self.items.upgrade_answered(failed);
     }
 
     pub fn close(&mut self) {

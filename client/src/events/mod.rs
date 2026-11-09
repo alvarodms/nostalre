@@ -23,6 +23,7 @@ mod quest;
 mod skill;
 mod storage;
 mod trade;
+mod upgrade;
 
 use crate::App;
 use crate::body_effect::{Counter, Trigger};
@@ -377,6 +378,11 @@ impl App {
                 GameEvent::EquipSwitchAnswered { failed } => {
                     self.handle_equip_switch_answered(failed);
                 }
+                GameEvent::UpgradeWindowOpened { package_id } => {
+                    self.handle_upgrade_window_opened(package_id);
+                }
+                GameEvent::UpgradeAnswered { failed } => self.handle_upgrade_answered(failed),
+                GameEvent::ItemPreviewed { index } => self.handle_item_previewed(index),
                 GameEvent::EntityHpChanged { gid, hp, max_hp } => {
                     self.handle_entity_hp_changed(gid, hp, max_hp);
                 }
@@ -2551,6 +2557,14 @@ impl App {
                         account_id,
                         self.active_packetver,
                     ));
+                }
+                GameEvent::AskUpgradeItem {
+                    index,
+                    package_id,
+                    name,
+                } => self.ask_upgrade_item(index, package_id, name),
+                GameEvent::RequestUpgradeItem { index, package_id } => {
+                    self.request_upgrade_item(index, package_id);
                 }
                 GameEvent::AskUsePackageItem {
                     index,

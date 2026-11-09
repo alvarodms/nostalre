@@ -38,6 +38,9 @@ pub mod job_tables;
 #[rustfmt::skip] // generated (scripts/package-tables.py)
 pub mod package_tables;
 pub mod select_package;
+pub mod upgrade_package;
+#[rustfmt::skip] // generated (scripts/upgrade-tables.py)
+pub mod upgrade_tables;
 pub mod skill_tree;
 #[rustfmt::skip] // generated (scripts/skill-tree.py)
 pub mod skill_tree_tables;

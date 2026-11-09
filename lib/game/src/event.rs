@@ -803,6 +803,32 @@ pub enum GameEvent {
         box_id: u32,
         group: u32,
     },
+    /// An upgrade package used (its script's `laphine_upgrade()`, ZC_RANDOM_UPGRADE_ITEM_UI_OPEN 0x0ab4): the server
+    /// waits for the item to upgrade, and takes no other action of the player's until the window closes
+    UpgradeWindowOpened {
+        package_id: u32,
+    },
+    /// The server's answer to an upgrade (ZC_ACK_RANDOM_UPGRADE_ITEM 0x0ab7). On success it has already taken one
+    /// package and sent the item back upgraded; on failure it took nothing
+    UpgradeAnswered {
+        failed: bool,
+    },
+    /// The server shows an item it just changed (ZC_CHANGE_ITEM_OPTION 0x0b43, after an upgrade): kRO's client opens
+    /// its description. The item itself came in the inventory update before it
+    ItemPreviewed {
+        index: u16,
+    },
+    /// An item picked in the upgrade window: asked again before the package is spent
+    AskUpgradeItem {
+        index: u16,
+        package_id: u32,
+        name: String,
+    },
+    /// Upgrade the bag's item at `index` with the package (CZ_REQ_RANDOM_UPGRADE_ITEM 0x0ab6)
+    RequestUpgradeItem {
+        index: u16,
+        package_id: u32,
+    },
     RequestEquipItem {
         index: u16,
         location: u32,

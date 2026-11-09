@@ -402,6 +402,7 @@ impl App {
             preload_window(&mut self.windows.item_pickup_notification, renderer, grf);
             preload_window(&mut self.windows.skill_tree_window, renderer, grf);
             preload_window(&mut self.windows.refine_window, renderer, grf);
+            preload_window(&mut self.windows.upgrade_window, renderer, grf);
             preload_window(&mut self.windows.stylist_window, renderer, grf);
             preload_window(&mut self.windows.hotkey_bar, renderer, grf);
             preload_window(&mut self.windows.basic_info_window, renderer, grf);

@@ -29,6 +29,8 @@ impl App {
                 self.game.character.refine.close();
                 // and its stylist state (`pc_setpos`)
                 self.game.character.stylist.close();
+                // and its upgrade window (`pc_setpos`)
+                self.forget_upgrade_window();
                 // a market or a barter holds the player over a warp until its close request (a buy or sell shop
                 // is left alone: its empty list after a warp would be a failed purchase)
                 if self.windows.npc_shop.shop.kind != ShopKind::Plain {
@@ -62,6 +64,7 @@ impl App {
             }
             SessionChange::Logout => {
                 self.reset_map_transition();
+                self.forget_upgrade_window();
                 self.sound_queue.clear();
                 self.sound.stop_all_sfx();
                 self.window_state_restored = false;

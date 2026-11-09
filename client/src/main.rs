@@ -1113,6 +1113,7 @@ impl ApplicationHandler for App {
                 let mut queued = std::mem::take(&mut self.pending_events);
                 queued.extend(ui_events);
                 self.handle_ui_events(queued, event_loop);
+                self.sync_upgrade_window();
 
                 if self.game.session.pending_disconnect_exit {
                     event_loop.exit();

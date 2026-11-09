@@ -4,6 +4,7 @@ use super::bar_picker::ToBar;
 use super::frame::{self, COLUMN_GAP, Hint, Key, Keys, ROW_H, TABS_H, Textures};
 use super::item_detail::{ItemDetail, display_name, item_row};
 use super::package::Chooser;
+use super::upgrade::UpgradeChooser;
 use crate::BuildCtx;
 use crate::game::hotkey_bar::item_fits;
 use crate::game::inventory_window::activate;
@@ -14,6 +15,7 @@ use nostalre_game::event::GameEvent;
 use nostalre_game::inventory::InventoryData;
 use nostalre_game::item::{InventoryTab, Item};
 use nostalre_game::select_package::SelectPackage;
+use nostalre_game::upgrade_package::UpgradePackage;
 use nostalre_ui::frame::{UiFrame, WidgetId};
 use nostalre_ui::rect::Rect;
 
@@ -35,6 +37,9 @@ pub(super) struct Items {
     dropping: Option<DropPrompt>,
     /// A selection box opened: its choices take the screen until one is taken or the player backs out
     choosing: Option<Chooser>,
+    /// An upgrade package's window the server opened: the bag's items it takes, until one is upgraded or the player
+    /// backs out
+    upgrading: Option<UpgradeChooser>,
 }
 
 /// The drop question: for the item at `index`, as long as it is still that item
@@ -124,18 +129,29 @@ impl Items {
             .collect()
     }
 
-    /// Whether the drop question or a selection box is up: the screen under it takes no taps
+    /// Whether the drop question, a selection box or an upgrade is up: the screen under it takes no taps
     pub fn asking(&self) -> bool {
-        self.dropping.is_some() || self.choosing.is_some()
+        self.dropping.is_some() || self.choosing()
     }
 
-    /// Whether a selection box is up over the bag: the keys are its ([`Items::build_chooser`])
+    /// Whether a selection box or an upgrade is up over the bag: the keys are its ([`Items::build_chooser`])
     pub fn choosing(&self) -> bool {
-        self.choosing.is_some()
+        self.choosing.is_some() || self.upgrading.is_some()
     }
 
-    /// Escape out of the drop question, or a step back out of an open selection box
+    /// Whether an upgrade package's window is up
+    pub fn upgrading(&self) -> bool {
+        self.upgrading.is_some()
+    }
+
+    /// Escape out of the drop question, or a step back out of an open selection box or upgrade
     pub fn back(&mut self) -> bool {
+        if let Some(upgrader) = &mut self.upgrading {
+            if !upgrader.back() {
+                self.upgrading = None;
+            }
+            return true;
+        }
         if let Some(chooser) = &mut self.choosing {
             if !chooser.back() {
                 self.choosing = None;
@@ -149,6 +165,7 @@ impl Items {
     pub fn leave(&mut self) {
         self.dropping = None;
         self.choosing = None;
+        self.upgrading = None;
     }
 
     /// A selection box opened: its choices over the bag
@@ -157,7 +174,25 @@ impl Items {
         self.choosing = Some(Chooser::new(package));
     }
 
+    /// The server opened an upgrade package's window: the bag's items it takes over the bag
+    pub fn upgrade(&mut self, package: UpgradePackage) {
+        self.dropping = None;
+        self.choosing = None;
+        self.upgrading = Some(UpgradeChooser::new(package));
+    }
+
+    /// The server's answer to the upgrade: on success the window goes, on failure it says so and stays
+    pub fn upgrade_answered(&mut self, failed: Option<String>) {
+        match (failed, &mut self.upgrading) {
+            (Some(message), Some(upgrader)) => upgrader.failed(message),
+            _ => self.upgrading = None,
+        }
+    }
+
     pub fn footer(&self, ctx: &BuildCtx) -> (String, Vec<Hint>) {
+        if let Some(upgrader) = &self.upgrading {
+            return upgrader.footer(ctx);
+        }
         if let Some(chooser) = &self.choosing {
             return chooser.footer(ctx);
         }
@@ -271,7 +306,7 @@ impl Items {
         }
 
         // under a selection box the bag's list shows through, its detail is the box's
-        if let Some(item) = shown.get(self.picked).filter(|_| self.choosing.is_none()) {
+        if let Some(item) = shown.get(self.picked).filter(|_| !self.choosing()) {
             let x = list.x + list.w + COLUMN_GAP;
             let detail = Rect::new(x, list.y, area.x + area.w - x, list.h);
             let producers = &character.char_names;
@@ -315,6 +350,12 @@ impl Items {
         textures: &mut Textures,
         events: &mut Vec<GameEvent>,
     ) {
+        if let Some(upgrader) = &mut self.upgrading {
+            if upgrader.build(ui, ctx, area, keys, textures, events) {
+                self.upgrading = None;
+            }
+            return;
+        }
         if let Some(chooser) = &mut self.choosing
             && (!chooser.still_there(ctx) || chooser.build(ui, ctx, area, keys, textures, events))
         {

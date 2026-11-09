@@ -80,6 +80,7 @@ pub const ID_BLOCKS: &[IdBlock] = &[
     block("hud/corner.rs", 7000, 7009),
     block("hud/touch.rs", 7010, 7039),
     block("game/select_package_window.rs", 7100, 7199),
+    block("game/upgrade_window.rs", 7200, 7299),
 ];
 
 #[cfg(test)]

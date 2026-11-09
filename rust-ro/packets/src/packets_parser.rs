@@ -3301,6 +3301,21 @@ pub fn parse(buffer: &[u8], packetver: u32) -> Box<dyn Packet> {
     if buffer[0] == 0xce && buffer[1] == 0x0a {
         return Box::new(PacketCzReqEquipswitchSingle::from(buffer, packetver));
     }
+    if buffer[0] == 0xb4 && buffer[1] == 0x0a {
+        return Box::new(PacketZcRandomUpgradeItemUiOpen::from(buffer, packetver));
+    }
+    if buffer[0] == 0xb5 && buffer[1] == 0x0a {
+        return Box::new(PacketCzRandomUpgradeItemUiClose::from(buffer, packetver));
+    }
+    if buffer[0] == 0xb6 && buffer[1] == 0x0a {
+        return Box::new(PacketCzReqRandomUpgradeItem::from(buffer, packetver));
+    }
+    if buffer[0] == 0xb7 && buffer[1] == 0x0a {
+        return Box::new(PacketZcAckRandomUpgradeItem::from(buffer, packetver));
+    }
+    if buffer[0] == 0x43 && buffer[1] == 0x0b {
+        return Box::new(PacketZcChangeItemOption::from(buffer, packetver));
+    }
     Box::new(PacketUnknown::from(buffer))
 }
 
@@ -4408,6 +4423,11 @@ pub fn packet_len(packet_id: [u8; 2], packetver: u32) -> Option<usize> {
     if packet_id == [0x9c, 0x0a] { return Some(PacketCzReqEquipswitch::base_len(packetver)); }
     if packet_id == [0x9d, 0x0a] { return Some(PacketZcAckEquipswitch::base_len(packetver)); }
     if packet_id == [0xce, 0x0a] { return Some(PacketCzReqEquipswitchSingle::base_len(packetver)); }
+    if packet_id == [0xb4, 0x0a] { return Some(PacketZcRandomUpgradeItemUiOpen::base_len(packetver)); }
+    if packet_id == [0xb5, 0x0a] { return Some(PacketCzRandomUpgradeItemUiClose::base_len(packetver)); }
+    if packet_id == [0xb6, 0x0a] { return Some(PacketCzReqRandomUpgradeItem::base_len(packetver)); }
+    if packet_id == [0xb7, 0x0a] { return Some(PacketZcAckRandomUpgradeItem::base_len(packetver)); }
+    if packet_id == [0x43, 0x0b] { return Some(PacketZcChangeItemOption::base_len(packetver)); }
     None
 }
 
@@ -7710,6 +7730,21 @@ pub fn parse_json(json: &str, packetver: u32) -> Result<Box<dyn Packet>, String>
     }
     if packet_id.value.unwrap().eq("0xce0a") {
         return PacketCzReqEquipswitchSingle::from_json(entries, packetver).map(|p| Box::new(p) as Box<dyn Packet>);
+    }
+    if packet_id.value.unwrap().eq("0xb40a") {
+        return PacketZcRandomUpgradeItemUiOpen::from_json(entries, packetver).map(|p| Box::new(p) as Box<dyn Packet>);
+    }
+    if packet_id.value.unwrap().eq("0xb50a") {
+        return PacketCzRandomUpgradeItemUiClose::from_json(entries, packetver).map(|p| Box::new(p) as Box<dyn Packet>);
+    }
+    if packet_id.value.unwrap().eq("0xb60a") {
+        return PacketCzReqRandomUpgradeItem::from_json(entries, packetver).map(|p| Box::new(p) as Box<dyn Packet>);
+    }
+    if packet_id.value.unwrap().eq("0xb70a") {
+        return PacketZcAckRandomUpgradeItem::from_json(entries, packetver).map(|p| Box::new(p) as Box<dyn Packet>);
+    }
+    if packet_id.value.unwrap().eq("0x430b") {
+        return PacketZcChangeItemOption::from_json(entries, packetver).map(|p| Box::new(p) as Box<dyn Packet>);
     }
     }
     PacketUnknown::from_json(entries, packetver).map(|p| Box::new(p)  as Box<dyn Packet>)

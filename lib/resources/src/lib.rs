@@ -616,6 +616,23 @@ pub mod ui {
         SELECT_PACKAGE_ITEM_TIME = "data/texture/유저인터페이스/selectpackage/item_list_time.bmp";
         SELECT_PACKAGE_ITEM_RANDOM = "data/texture/유저인터페이스/selectpackage/item_list_ranop.bmp";
         SELECT_PACKAGE_ITEM_TIME_RANDOM = "data/texture/유저인터페이스/selectpackage/item_list_timeran.bmp";
+        // the upgrade window (kRO's random upgrade, "lapine"): its whole background with the title bar and the
+        // pentagram, the bag list's picked row, the ← that moves the picked item into the slot, Make and Cancel,
+        // and the footer's notice mark
+        UPGRADE_BG = "data/texture/유저인터페이스/lapine/bg_lapineupgrade.bmp";
+        UPGRADE_ROW_PICKED = "data/texture/유저인터페이스/lapine/list_selected_item.bmp";
+        UPGRADE_MOVE = "data/texture/유저인터페이스/lapine/btn_moveitem_out.bmp";
+        UPGRADE_MOVE_OVER = "data/texture/유저인터페이스/lapine/btn_moveitem_over.bmp";
+        UPGRADE_MOVE_PRESS = "data/texture/유저인터페이스/lapine/btn_moveitem_press.bmp";
+        UPGRADE_MOVE_OFF = "data/texture/유저인터페이스/lapine/btn_moveitem_dis.bmp";
+        UPGRADE_MAKE = "data/texture/유저인터페이스/lapine/btn_make_out.bmp";
+        UPGRADE_MAKE_OVER = "data/texture/유저인터페이스/lapine/btn_make_over.bmp";
+        UPGRADE_MAKE_PRESS = "data/texture/유저인터페이스/lapine/btn_make_press.bmp";
+        UPGRADE_MAKE_OFF = "data/texture/유저인터페이스/lapine/btn_make_dis.bmp";
+        UPGRADE_CANCEL = "data/texture/유저인터페이스/lapine/btn_cancel_out.bmp";
+        UPGRADE_CANCEL_OVER = "data/texture/유저인터페이스/lapine/btn_cancel_over.bmp";
+        UPGRADE_CANCEL_PRESS = "data/texture/유저인터페이스/lapine/btn_cancel_press.bmp";
+        UPGRADE_NOTICE = "data/texture/유저인터페이스/lapine/icon_notify.bmp";
         SIGN_BOARD_BG = "data/texture/유저인터페이스/signboard/bg_signboard.bmp";
         SHOW_DAMAGE_BG = "data/texture/유저인터페이스/showdamage/bg_damage.bmp";
         SHOW_DAMAGE_CELL = "data/texture/유저인터페이스/showdamage/btn_damage.bmp";
