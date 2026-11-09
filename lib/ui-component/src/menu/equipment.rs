@@ -1,4 +1,6 @@
-//! Equipment: what you wear, slot by slot, and beside it what in your bag fits the picked slot.
+//! Equipment: what you wear, slot by slot, and beside it the picked one's description. Under it a line says how
+//! much in your bag fits the slot; choosing the slot (or that line) opens the replace view, the bag's fitting
+//! items listed under the description of the one picked.
 use super::ROW_BASE_ID;
 use super::frame::{self, COLUMN_GAP, Hint, ICON, Key, Keys, ROW_H, TABS_H, Textures};
 use super::item_detail::{ItemDetail, display_name, icon, item_row};
@@ -47,15 +49,18 @@ const MORE_HELP: [&str; 2] = [
 const MORE_W: f32 = 420.0;
 const SLOT_LABEL_W: f32 = 140.0;
 const SLOTS_SHARE: f32 = 0.48;
-/// The right column: the picked item on top, the bag under it
-const DETAIL_SHARE: f32 = 0.5;
+/// The replace view's bag list takes at most this much of the right column, the description the rest
+const BAG_SHARE: f32 = 0.5;
 /// The bag's rows start after the slots' ids
 const BAG_ROW_OFFSET: u32 = 20;
+/// The line that says what in the bag fits, under the description
+const SUMMARY_ROW: u32 = BAG_ROW_OFFSET - 1;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum Focus {
     #[default]
     Slots,
+    /// The replace view: what in the bag fits the picked slot, also when nothing does
     Bag,
 }
 
@@ -102,7 +107,7 @@ fn equip(item: &Item, location: EquipmentLocation) -> GameEvent {
 }
 
 impl Equipment {
-    /// Escape from the bag goes back to the slots
+    /// Escape from the replace view goes back to the slots
     pub fn back(&mut self) -> bool {
         let was_bag = self.focus == Focus::Bag;
         self.focus = Focus::Slots;
@@ -136,9 +141,8 @@ impl Equipment {
                 let worn = inv.equipped_in_slot(location);
                 let help = worn.map_or_else(|| format!("{label}: nothing"), name);
                 let mut hints = vec![Hint::MOVE, Hint::TABS];
-                if !fits(inv, location).is_empty() {
-                    hints.push(Hint::tap("Enter", "choose", Key::Enter));
-                }
+                let open = if worn.is_some() { "replace" } else { "wear" };
+                hints.push(Hint::tap("Enter", open, Key::Enter));
                 if worn.is_some() {
                     hints.push(Hint::tap("Del", "remove", Key::Remove));
                 }
@@ -146,9 +150,11 @@ impl Equipment {
                 (help, hints)
             }
             Focus::Bag => {
-                let help = fits(inv, location)
-                    .get(self.bag)
-                    .map_or_else(String::new, |item| name(item));
+                let Some(item) = fits(inv, location).get(self.bag).copied() else {
+                    let help = format!("Nothing in your bag fits {}.", label.to_lowercase());
+                    return (help, vec![Hint::BACK]);
+                };
+                let help = name(item);
                 (
                     help,
                     vec![
@@ -200,8 +206,8 @@ impl Equipment {
             self.bag = frame::step(keys, self.bag, bag.len());
         }
         self.bag = self.bag.min(bag.len().saturating_sub(1));
-        // the last fitting item went on, or was used up: back to the slots
-        if bag.is_empty() {
+        // the cart's row has no bag to choose from
+        if location.is_none() {
             self.focus = Focus::Slots;
         }
 
@@ -275,11 +281,23 @@ impl Equipment {
 
         let x = area.x + left_w + COLUMN_GAP;
         let w = area.x + area.w - x;
-        let detail_h = (area.h - TABS_H) * DETAIL_SHARE;
-        let detail = Rect::new(x, top, w, detail_h);
+        let bottom = area.y + area.h;
+        let line = style::line(ui);
+        // the replace view lists the bag under the description, as many rows as fit up to `BAG_SHARE`; else
+        // one line says what fits and the description takes the rest
+        let list_top = match self.focus {
+            Focus::Bag => {
+                let room = ((bottom - top) * BAG_SHARE - line - 20.0).max(ROW_H);
+                let rows = bag.len().clamp(1, ((room / ROW_H).floor() as usize).max(1));
+                bottom - rows as f32 * ROW_H - line - 20.0
+            }
+            Focus::Slots => bottom - ROW_H - 12.0,
+        };
+        let detail = Rect::new(x, top, w, list_top - 12.0 - top);
+        let worn = location.and_then(worn_in);
         let shown = match self.focus {
-            Focus::Slots => location.and_then(worn_in),
-            Focus::Bag => bag.get(self.bag).copied(),
+            Focus::Slots => worn,
+            Focus::Bag => bag.get(self.bag).copied().or(worn),
         };
         match shown {
             Some(item) => {
@@ -296,52 +314,67 @@ impl Equipment {
                 style::text(ui, x, style::baseline(ui, top), &note, style::DIM);
             }
         }
-        let y = frame::section(ui, x, top + detail_h + 12.0, w, "In your bag");
-        let list = Rect::new(x, y, w, area.y + area.h - y);
-        let visible = (list.h / ROW_H).floor() as usize;
-        frame::scroll(
-            ui,
-            list,
-            &mut self.bag_offset,
-            self.bag,
-            bag.len(),
-            visible,
-            before != self.bag,
-        );
-        if bag.is_empty() {
-            style::text(
-                ui,
-                x,
-                style::baseline(ui, y),
-                "Nothing that fits.",
-                style::DIM,
-            );
-        }
         let mut wear = None;
-        for (row, (i, item)) in bag
-            .iter()
-            .enumerate()
-            .skip(self.bag_offset)
-            .take(visible)
-            .enumerate()
-        {
-            let rect = Rect::new(x, y + row as f32 * ROW_H, w, ROW_H);
-            let picked = self.focus == Focus::Bag && i == self.bag;
-            let id = WidgetId(ROW_BASE_ID + BAG_ROW_OFFSET + row as u32);
-            let resp = item_row(ui, id, rect, picked, item, &names(item), None);
-            if resp.clicked() {
-                self.focus = Focus::Bag;
-                self.bag = i;
+        match self.focus {
+            Focus::Slots if location.is_some() => {
+                style::rule(ui, x, list_top, w);
+                let rect = Rect::new(x, list_top + 12.0, w, ROW_H);
+                let id = WidgetId(ROW_BASE_ID + SUMMARY_ROW);
+                if frame::row(ui, id, rect, false).clicked() {
+                    self.open_bag();
+                }
+                let baseline = frame::row_baseline(ui, rect);
+                let (summary, color) = match bag.len() {
+                    0 => ("Nothing in your bag fits".to_string(), style::DIM_MORE),
+                    1 => ("1 item in your bag fits".to_string(), style::DIM),
+                    n => (format!("{n} items in your bag fit"), style::DIM),
+                };
+                style::text(ui, x + frame::ROW_TEXT, baseline, &summary, color);
+                style::text_right(ui, x + w - 8.0, baseline, "»", color);
             }
-            if resp.double_clicked() {
-                wear = Some(*item);
+            Focus::Slots => {}
+            Focus::Bag => {
+                let y = frame::section(ui, x, list_top + 8.0, w, "In your bag");
+                let list = Rect::new(x, y, w, bottom - y);
+                let visible = (list.h / ROW_H).floor() as usize;
+                frame::scroll(
+                    ui,
+                    list,
+                    &mut self.bag_offset,
+                    self.bag,
+                    bag.len(),
+                    visible,
+                    before != self.bag,
+                );
+                if bag.is_empty() {
+                    let rect = Rect::new(x, y, w, ROW_H);
+                    let baseline = frame::row_baseline(ui, rect);
+                    let note = "Nothing that fits.";
+                    style::text(ui, x + frame::ROW_TEXT, baseline, note, style::DIM);
+                }
+                for (row, (i, item)) in bag
+                    .iter()
+                    .enumerate()
+                    .skip(self.bag_offset)
+                    .take(visible)
+                    .enumerate()
+                {
+                    let rect = Rect::new(x, y + row as f32 * ROW_H, w, ROW_H);
+                    let picked = i == self.bag;
+                    let id = WidgetId(ROW_BASE_ID + BAG_ROW_OFFSET + row as u32);
+                    let resp = item_row(ui, id, rect, picked, item, &names(item), None);
+                    if resp.clicked() {
+                        self.bag = i;
+                    }
+                    if resp.double_clicked() {
+                        wear = Some(*item);
+                    }
+                }
             }
         }
 
         match self.focus {
-            Focus::Slots if (keys.enter || keys.right) && !bag.is_empty() => {
-                self.focus = Focus::Bag;
-            }
+            Focus::Slots if (keys.enter || keys.right) && location.is_some() => self.open_bag(),
             Focus::Bag if keys.left => self.focus = Focus::Slots,
             Focus::Bag if keys.enter => wear = bag.get(self.bag).copied(),
             _ => {}
@@ -351,6 +384,13 @@ impl Equipment {
             self.focus = Focus::Slots;
         }
         false
+    }
+
+    /// Into the replace view, from the first item that fits
+    fn open_bag(&mut self) {
+        self.focus = Focus::Bag;
+        self.bag = 0;
+        self.bag_offset = 0;
     }
 
     /// The More tab: a list of the windows with the rest; true once one opens

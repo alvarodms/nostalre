@@ -1051,9 +1051,12 @@ impl App {
         insert_window_sprites(&mut all_ui_calls, overlay_len, window_sprites);
         all_ui_calls.extend(skill_level_calls);
         all_ui_calls.extend(roulette_calls);
-        // the loading screen over every window, and no cursor over it while the player can't act
+        // the loading screen over every window, and no cursor over it while the player can't act; none either
+        // over the menu while a controller drives it (its right stick scrolls there, the cursor would only sit)
         let loading_screen = self.loading_screen_calls();
-        let hide_cursor = self.transition.state.blocks_input();
+        let pad_menu = self.windows.menu.is_open()
+            && self.ui_context.as_ref().is_some_and(|ctx| ctx.pad_labels);
+        let hide_cursor = self.transition.state.blocks_input() || pad_menu;
         let covered = loading_screen.is_some();
         if let Some(calls) = loading_screen {
             all_ui_calls.extend(calls);
