@@ -1445,12 +1445,9 @@ impl App {
                         now,
                     );
                 }
-                GameEvent::AfterCastDelay { delay_ms } => {
+                GameEvent::AfterCastDelay { gid, delay_ms } => {
                     let now = self.start_time.elapsed().as_secs_f32();
-                    self.game
-                        .character
-                        .cooldowns
-                        .set_global_cooldown(delay_ms as f32 / 1000.0, now);
+                    self.game.apply_after_cast_delay(gid, delay_ms, now);
                 }
 
                 GameEvent::ServerTick {
