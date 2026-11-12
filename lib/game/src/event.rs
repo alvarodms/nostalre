@@ -460,7 +460,9 @@ pub enum GameEvent {
         skill: SkillEnum,
         delay_ms: u32,
     },
+    /// `EFST_POSTDELAY` on `gid`: the server sends it for every caster in view.
     AfterCastDelay {
+        gid: u32,
         delay_ms: u32,
     },
     SkillDamage {

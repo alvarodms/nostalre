@@ -788,6 +788,17 @@ impl GameState {
 
     /// Reads the player's cart design out of the `OPTION_CART` bits carried in
     /// `effect_state` and records it on the entity and character. Returns the
+    /// `EFST_POSTDELAY` reaches every client in view of the caster, so only
+    /// the local player's own after-cast delay may lock the hotbar.
+    pub fn apply_after_cast_delay(&mut self, gid: u32, delay_ms: u32, now: f32) {
+        let gid = self.world.entities.resolve_key(gid);
+        if self.world.entities.player_id() == Some(gid) {
+            self.character
+                .cooldowns
+                .set_global_cooldown(delay_ms as f32 / 1000.0, now);
+        }
+    }
+
     /// `(player gid, design)` to spawn, or `None` when the player has no cart.
     /// Servers that deliver the cart as a status change instead leave these
     /// bits clear, so this is a no-op there and the status path takes over.
@@ -956,6 +967,43 @@ impl GameState {
             (size_index > 0, size_index == 1),
         );
         result
+    }
+}
+
+#[cfg(test)]
+mod after_cast_delay_tests {
+    use super::*;
+    use nostalre_game::entity::Entity;
+
+    fn with_player() -> GameState {
+        let mut game = GameState::new();
+        let player = Entity::new_player(1000, 0, 1, 0, 0, 0, 0, 0, 0, 0, 5, 5, 0);
+        game.world.entities.set_player_id(1000);
+        game.world.entities.insert(player);
+        game
+    }
+
+    #[test]
+    fn another_casters_delay_leaves_our_skills_free() {
+        let mut game = with_player();
+        game.apply_after_cast_delay(2000, 3000, 0.0);
+        assert!(
+            !game
+                .character
+                .cooldowns
+                .is_on_cooldown(SkillEnum::MgFirebolt, 1.0)
+        );
+    }
+
+    #[test]
+    fn our_own_delay_locks_our_skills() {
+        let mut game = with_player();
+        game.apply_after_cast_delay(1000, 3000, 0.0);
+        assert!(
+            game.character
+                .cooldowns
+                .is_on_cooldown(SkillEnum::MgFirebolt, 1.0)
+        );
     }
 }
 

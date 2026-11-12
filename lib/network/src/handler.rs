@@ -907,8 +907,10 @@ pub fn dispatch_packet(packet: &dyn Packet) -> Vec<GameEvent> {
         }];
     }
     if let Some(p) = any.downcast_ref::<PacketZcMsgStateChange2>() {
+        // EFST_POSTDELAY goes to the whole area, so it carries the caster's aid.
         if p.index == 46 && p.state {
             return vec![GameEvent::AfterCastDelay {
+                gid: p.aid,
                 delay_ms: p.remain_ms,
             }];
         }
@@ -6899,7 +6901,10 @@ mod tests {
         let result = dispatch_packet(&pkt);
         assert!(matches!(
             &result[0],
-            GameEvent::AfterCastDelay { delay_ms: 500 }
+            GameEvent::AfterCastDelay {
+                gid: 150000,
+                delay_ms: 500
+            }
         ));
 
         let mut pkt = PacketZcMsgStateChange::new(packetver);
