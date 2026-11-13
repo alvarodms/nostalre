@@ -439,6 +439,20 @@ impl Gamepad {
         }
     }
 
+    /// Under the loading screen: the presses since the last frame are dropped, and so is their release (no
+    /// click let go that never went down); the releases wait for `take_releases`
+    fn cover(&mut self) {
+        self.walk = None;
+        self.menu_presses.extend(self.fresh.drain(..));
+    }
+
+    /// The buttons let go since the last frame whose release is a click's: not the menu's keys
+    fn take_releases(&mut self) -> Vec<Button> {
+        let mut released = std::mem::take(&mut self.released);
+        released.retain(|button| !self.menu_presses.remove(button));
+        released
+    }
+
     /// Select held this frame: still down, or let go since the last one (a quick Select+D-pad press can start
     /// and end between two frames).
     fn select_down(&self) -> bool {
@@ -516,10 +530,10 @@ impl App {
             .map_or(0.0, |t| now.duration_since(t).as_secs_f32().min(0.1));
         self.gamepad.last_frame = Some(now);
         if self.transition.state.blocks_input() {
-            // under the loading screen: no walking, and no button acts on the map left behind or the one loading
-            self.gamepad.walk = None;
-            self.gamepad.fresh.clear();
-            self.gamepad.released.clear();
+            // under the loading screen: no walking, and no button acts on the map left behind or the one loading;
+            // a button let go still lets go of its click, or A pressed before a warp walks on by itself after it
+            self.gamepad.cover();
+            self.gamepad_releases(event_loop, window);
             return;
         }
 
@@ -535,15 +549,16 @@ impl App {
 
         let select = self.gamepad.select_down();
         let fresh = std::mem::take(&mut self.gamepad.fresh);
-        let released = std::mem::take(&mut self.gamepad.released);
         let group = self.gamepad.group();
         for &button in &fresh {
             self.gamepad_press(event_loop, window, button, select, group);
         }
-        for button in released {
-            if self.gamepad.menu_presses.remove(&button) {
-                continue;
-            }
+        self.gamepad_releases(event_loop, window);
+    }
+
+    /// The buttons let go since the last frame: A and B let go of their mouse button
+    fn gamepad_releases(&mut self, event_loop: &ActiveEventLoop, window: WindowId) {
+        for button in self.gamepad.take_releases() {
             match button {
                 Button::A => self.gamepad_click(
                     event_loop,
@@ -1488,6 +1503,49 @@ mod tests {
         wheel_frame(&mut pad, t, false);
         wheel_frame(&mut pad, t + WHEEL_DELAY, false);
         assert_eq!(pad.wheel, None);
+    }
+
+    #[test]
+    fn a_button_let_go_under_the_loading_screen_still_lets_go_of_its_click() {
+        let mut pad = Gamepad::default();
+        // A held to walk into a warp: its press went out before the loading screen
+        pad.press(Button::A);
+        pad.fresh.clear();
+        pad.release(Button::A);
+        pad.cover();
+        assert_eq!(pad.take_releases(), [Button::A]);
+    }
+
+    #[test]
+    fn a_press_under_the_loading_screen_has_no_release_either() {
+        let mut pad = Gamepad::default();
+        pad.press(Button::A);
+        pad.cover();
+        assert!(pad.fresh.is_empty());
+        pad.release(Button::A);
+        assert!(pad.take_releases().is_empty());
+        // the next press is a click again
+        pad.press(Button::A);
+        pad.fresh.clear();
+        pad.release(Button::A);
+        assert_eq!(pad.take_releases(), [Button::A]);
+    }
+
+    #[test]
+    fn a_dialog_press_let_go_under_the_loading_screen_leaves_the_next_click_alone() {
+        let mut pad = Gamepad::default();
+        // A picks a warper's destination: the dialog's key, its release no click
+        pad.press(Button::A);
+        pad.fresh.clear();
+        pad.menu_presses.insert(Button::A);
+        pad.release(Button::A);
+        pad.cover();
+        assert!(pad.take_releases().is_empty());
+        // on the new map A's click lets go when A does
+        pad.press(Button::A);
+        pad.fresh.clear();
+        pad.release(Button::A);
+        assert_eq!(pad.take_releases(), [Button::A]);
     }
 
     #[test]
